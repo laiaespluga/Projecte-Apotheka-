@@ -1,4 +1,1 @@
 # Projecte-Apotheka-
-
-
-# Màniga
