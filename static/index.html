@@ -18,17 +18,24 @@
 </head>
 <body class="bg-slate-100 h-screen flex flex-col overflow-hidden">
 
-    <!-- CABECERA SUPERIOR -->
-    <header class="bg-teal-700 text-white px-6 py-4 flex justify-between items-center shadow-md z-20">
-        <div class="flex items-center gap-3 cursor-pointer" onclick="anarA('inici')">
-            <span class="text-3xl bg-white text-teal-700 w-11 h-11 rounded-2xl flex items-center justify-center font-black shadow">+</span>
-            <div>
-                <h1 class="text-2xl font-black tracking-tight">APOTHEKA</h1>
-                <p class="text-xs text-teal-100">Conectado a CIMA AEMPS · Dispensación Robotizada</p>
+    <!-- CABECERA SUPERIOR: BOTÓN FARMACIA SEPARADO A LA IZQUIERDA, SESIÓN A LA DERECHA -->
+    <header class="bg-teal-700 text-white px-6 py-4 flex flex-wrap justify-between items-center gap-4 shadow-md z-20">
+        <div class="flex items-center gap-5">
+            <div class="flex items-center gap-3 cursor-pointer" onclick="anarA('inici')">
+                <span class="text-3xl bg-white text-teal-700 w-11 h-11 rounded-2xl flex items-center justify-center font-black shadow">+</span>
+                <div>
+                    <h1 class="text-2xl font-black tracking-tight">APOTHEKA</h1>
+                    <p class="text-xs text-teal-100">Conectado a CIMA AEMPS · Dispensación Robotizada</p>
+                </div>
             </div>
+
+            <!-- ACCESO INDEPENDIENTE AL PANEL INTERNO DE FARMACIA -->
+            <a href="/farmacia" target="_blank" class="bg-teal-900/90 hover:bg-teal-950 text-teal-100 font-bold text-xs px-4 py-2.5 rounded-xl border border-teal-400/40 transition shadow-sm">
+                🏥 Panel Interno Farmacia
+            </a>
         </div>
 
-        <!-- ESTADO DE SESIÓN CON 3 ACCIONES: MI PERFIL / CAMBIAR USUARIO / SALIR -->
+        <!-- RECUADRO EXCLUSIVO DE ESTADO DE SESIÓN Y USUARIO -->
         <div class="flex items-center gap-2.5 bg-teal-800 px-4 py-2 rounded-2xl border border-teal-500">
             <div class="text-right mr-1">
                 <div id="header-nom" class="font-bold text-sm">Usuario No Identificado</div>
@@ -50,26 +57,28 @@
     </header>
 
     <!-- VISTA 1: SELECCIÓN INICIAL -->
-    <main id="vista-inici" class="flex-1 flex flex-col items-center justify-center p-8">
-        <div class="text-center max-w-2xl mb-10">
-            <h2 class="text-4xl font-black text-slate-800">¿Qué operación deseas realizar?</h2>
-            <p id="subtitol-inici" class="text-slate-500 mt-2 text-lg">Identifícate con tu huella dactilar o DNI/NIE para validar incompatibilidades médicas.</p>
-        </div>
+    <main id="vista-inici" class="flex-1 overflow-y-auto flex flex-col items-center justify-start p-6 md:p-8">
+        <div class="my-auto w-full flex flex-col items-center py-4">
+            <div class="text-center max-w-2xl mb-8 md:mb-10">
+                <h2 class="text-3xl md:text-4xl font-black text-slate-800">¿Qué operación deseas realizar?</h2>
+                <p id="subtitol-inici" class="text-slate-500 mt-2 text-base md:text-lg">Identifícate con tu huella dactilar o DNI/NIE para validar incompatibilidades médicas, o continúa sin identificar.</p>
+            </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-8 w-full max-w-4xl">
-            <button onclick="obrirCatalegOTC()" class="touch-btn bg-white p-10 rounded-3xl shadow-xl border-4 border-transparent hover:border-teal-500 flex flex-col items-center text-center transition">
-                <div class="w-24 h-24 bg-teal-100 text-teal-700 rounded-full flex items-center justify-center text-5xl mb-5">🛒</div>
-                <h3 class="text-3xl font-black text-slate-800">Sin Receta</h3>
-                <p class="text-slate-500 mt-2">Medicamentos OTC, alivio de síntomas y recomendaciones personalizadas</p>
-                <span class="mt-6 bg-teal-600 text-white font-bold py-3.5 px-6 rounded-2xl w-full text-lg">Explorar Catálogo →</span>
-            </button>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8 w-full max-w-4xl">
+                <button onclick="obrirCatalegOTC()" class="touch-btn bg-white p-8 md:p-10 rounded-3xl shadow-xl border-4 border-transparent hover:border-teal-500 flex flex-col items-center text-center transition">
+                    <div class="w-20 h-20 md:w-24 md:h-24 bg-teal-100 text-teal-700 rounded-full flex items-center justify-center text-4xl md:text-5xl mb-5">🛒</div>
+                    <h3 class="text-2xl md:text-3xl font-black text-slate-800">Sin Receta</h3>
+                    <p class="text-slate-500 mt-2">Medicamentos OTC, alivio de síntomas y recomendaciones personalizadas</p>
+                    <span class="mt-6 bg-teal-600 text-white font-bold py-3.5 px-6 rounded-2xl w-full text-lg">Explorar Catálogo →</span>
+                </button>
 
-            <button onclick="anarA('qr')" class="touch-btn bg-white p-10 rounded-3xl shadow-xl border-4 border-transparent hover:border-indigo-500 flex flex-col items-center text-center transition">
-                <div class="w-24 h-24 bg-indigo-100 text-indigo-700 rounded-full flex items-center justify-center text-5xl mb-5">📱</div>
-                <h3 class="text-3xl font-black text-slate-800">Con Receta Médica</h3>
-                <p class="text-slate-500 mt-2">Requiere la lectura del código QR de tu receta electrónica</p>
-                <span class="mt-6 bg-indigo-600 text-white font-bold py-3.5 px-6 rounded-2xl w-full text-lg">Escanear Código QR →</span>
-            </button>
+                <button onclick="anarA('qr')" class="touch-btn bg-white p-8 md:p-10 rounded-3xl shadow-xl border-4 border-transparent hover:border-indigo-500 flex flex-col items-center text-center transition">
+                    <div class="w-20 h-20 md:w-24 md:h-24 bg-indigo-100 text-indigo-700 rounded-full flex items-center justify-center text-4xl md:text-5xl mb-5">📱</div>
+                    <h3 class="text-2xl md:text-3xl font-black text-slate-800">Con Receta Médica</h3>
+                    <p class="text-slate-500 mt-2">Requiere la lectura del código QR de tu receta electrónica</p>
+                    <span class="mt-6 bg-indigo-600 text-white font-bold py-3.5 px-6 rounded-2xl w-full text-lg">Escanear Código QR →</span>
+                </button>
+            </div>
         </div>
     </main>
 
@@ -246,6 +255,29 @@
     <!-- VISTA 4: CATÁLOGO SIN RECETA -->
     <main id="vista-otc" class="hidden flex-1 flex overflow-hidden">
         <div class="flex-1 flex flex-col p-6 overflow-y-auto">
+            <!-- FILTRO RÁPIDO DE ALERGIAS / INCOMPATIBILIDADES PARA USUARIO NO IDENTIFICADO -->
+            <div id="box-anonim-incompatibilitats" class="mb-4 bg-amber-50 border border-amber-200 rounded-2xl p-3.5 flex flex-wrap items-center justify-between gap-3">
+                <div>
+                    <div class="text-xs font-black uppercase text-amber-900">Usuario no identificado · Indicar alergias o incompatibilidades previas</div>
+                    <div class="text-[11px] text-amber-800">Marca las incompatibilidades o condiciones a comprobar antes de comprar:</div>
+                </div>
+                <div class="flex flex-wrap items-center gap-2 text-xs">
+                    <label class="inline-flex items-center gap-1.5 bg-white border border-amber-300 px-2.5 py-1.5 rounded-xl font-bold text-slate-700 cursor-pointer">
+                        <input type="checkbox" class="anon-contra accent-amber-600" value="hipertension" onchange="actualitzarAvisAnonim()"> Hipertensión
+                    </label>
+                    <label class="inline-flex items-center gap-1.5 bg-white border border-amber-300 px-2.5 py-1.5 rounded-xl font-bold text-slate-700 cursor-pointer">
+                        <input type="checkbox" class="anon-contra accent-amber-600" value="embarazo" onchange="actualitzarAvisAnonim()"> Embarazo
+                    </label>
+                    <label class="inline-flex items-center gap-1.5 bg-white border border-amber-300 px-2.5 py-1.5 rounded-xl font-bold text-slate-700 cursor-pointer">
+                        <input type="checkbox" class="anon-contra accent-amber-600" value="ulcera" onchange="actualitzarAvisAnonim()"> Úlcera / Estómago
+                    </label>
+                    <label class="inline-flex items-center gap-1.5 bg-white border border-amber-300 px-2.5 py-1.5 rounded-xl font-bold text-slate-700 cursor-pointer">
+                        <input type="checkbox" class="anon-contra accent-amber-600" value="glaucoma" onchange="actualitzarAvisAnonim()"> Glaucoma
+                    </label>
+                    <input id="anon-contra-extra" oninput="actualitzarAvisAnonim()" type="text" placeholder="Otra incompatibilidad..." class="bg-white border border-amber-300 rounded-xl px-3 py-1.5 text-xs outline-none w-40">
+                </div>
+            </div>
+
             <div class="flex flex-wrap gap-3 mb-5">
                 <button onclick="anarA('inici')" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold px-4 py-2.5 rounded-xl">← Inicio</button>
                 <input id="cerca-otc" oninput="pintarProductes()" type="text" placeholder="🔍 Buscar medicamento o principio activo..." 
@@ -266,7 +298,7 @@
                     <span>Total</span>
                     <span id="total-cistella">0,00 €</span>
                 </div>
-                <button id="btn-confirmar-otc" onclick="comprovarVendaCreuada()" disabled
+                <button id="btn-confirmar-otc" onclick="iniciarFluxConfirmacioOTC()" disabled
                         class="w-full bg-teal-600 disabled:bg-slate-300 hover:bg-teal-700 text-white font-black py-4 rounded-2xl text-lg shadow">
                     Confirmar Pedido →
                 </button>
@@ -275,7 +307,7 @@
     </main>
 
     <!-- VISTA 5: VENTA CON RECETA QR -->
-    <main id="vista-qr" class="hidden flex-1 flex flex-col items-center justify-center p-8">
+    <main id="vista-qr" class="hidden flex-1 overflow-y-auto flex flex-col items-center justify-start md:justify-center p-8">
         <div class="bg-white p-10 rounded-3xl shadow-xl max-w-xl w-full text-center border border-slate-200">
             <button onclick="anarA('inici')" class="text-slate-400 hover:text-slate-700 font-bold mb-4 block">← Volver</button>
             <div class="text-6xl mb-3">📷</div>
@@ -301,7 +333,36 @@
         </div>
     </main>
 
-    <!-- MODALES -->
+    <!-- MODAL ACEPTACIÓN DE INCOMPATIBILIDADES PARA USUARIO NO IDENTIFICADO -->
+    <div id="modal-acceptacio-anonim" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50">
+        <div class="bg-white rounded-3xl max-w-lg w-full p-8 shadow-2xl border-4 border-amber-500">
+            <div class="flex items-center gap-3 mb-3">
+                <span class="text-4xl">⚠️</span>
+                <div>
+                    <span class="bg-amber-100 text-amber-900 text-[11px] font-black px-2.5 py-0.5 rounded-full uppercase">Aviso Previo a la Venta (Sin Perfil)</span>
+                    <h3 class="text-xl font-black text-slate-800 mt-0.5">Incompatibilidades y Precauciones</h3>
+                </div>
+            </div>
+            <p class="text-xs text-slate-500 mb-3">Al comprar sin perfil registrado, revisa las incompatibilidades o precauciones asociadas a los productos seleccionados:</p>
+            <div id="llista-incompatibilitats-anonim" class="bg-amber-50 border border-amber-200 text-amber-950 p-4 rounded-2xl text-xs space-y-2 max-h-60 overflow-y-auto"></div>
+
+            <label class="mt-4 flex items-start gap-2.5 text-xs font-bold text-slate-700 cursor-pointer bg-slate-50 p-3 rounded-xl border border-slate-200">
+                <input id="chk-acceptar-venda-anonim" type="checkbox" class="mt-0.5 w-4 h-4 accent-amber-600 rounded">
+                <span>He revisado las incompatibilidades indicadas y acepto realizar la compra bajo mi responsabilidad.</span>
+            </label>
+
+            <div class="grid grid-cols-2 gap-3 mt-5">
+                <button onclick="tancarModal('modal-acceptacio-anonim')" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-3 rounded-2xl text-sm">
+                    Cancelar / Revisar
+                </button>
+                <button onclick="continuarDespresAcceptacioAnonim()" class="bg-amber-600 hover:bg-amber-700 text-white font-black py-3 rounded-2xl text-sm shadow">
+                    Aceptar y Continuar →
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODALES EXISTENTES -->
     <div id="modal-cross-sell" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
         <div class="bg-white rounded-3xl max-w-md w-full p-8 text-center shadow-2xl border-4 border-teal-500">
             <span class="bg-teal-100 text-teal-800 text-xs font-black px-3 py-1 rounded-full uppercase">Recomendación Farmacéutica</span>
@@ -344,6 +405,7 @@
         let modeEdicio = false;
         let seleccionats = { alergies: [], patologies: [], medicacio: [] };
         let timerCerca = null;
+        let vendaAnonimAcceptada = false;
 
         function anarA(vista) {
             ['inici', 'login', 'registre', 'otc', 'qr'].forEach(v => {
@@ -353,6 +415,66 @@
         }
 
         function tancarModal(id) { document.getElementById(id).classList.add('hidden'); }
+
+        function obtenirIncompatibilitatsAnonimSeleccionades() {
+            const marcades = [...document.querySelectorAll('.anon-contra:checked')].map(el => el.value.toLowerCase());
+            const extraRaw = (document.getElementById('anon-contra-extra')?.value || '').trim().toLowerCase();
+            if (extraRaw) {
+                extraRaw.split(',').map(s => s.trim()).filter(Boolean).forEach(t => marcades.push(t));
+            }
+            return marcades;
+        }
+
+        function actualitzarAvisAnonim() {
+            vendaAnonimAcceptada = false;
+        }
+
+        function iniciarFluxConfirmacioOTC() {
+            if (cistella.length === 0) return;
+
+            // Si el usuario no está identificado, mostrar alerta de incompatibilidades y exigir aceptación previa
+            if (!usuariActiu && !vendaAnonimAcceptada) {
+                const triades = obtenirIncompatibilitatsAnonimSeleccionades();
+                const avisos = [];
+
+                cistella.forEach(item => {
+                    const contrasItem = (item.contraindicacions || '')
+                        .split(',')
+                        .map(s => s.trim().toLowerCase())
+                        .filter(Boolean);
+
+                    const coincidents = contrasItem.filter(c =>
+                        triades.some(t => c.includes(t) || t.includes(c))
+                    );
+
+                    if (coincidents.length > 0) {
+                        avisos.push(`⛔ <b>${item.nom_oficial}</b>: incompatible con tus indicaciones seleccionadas (<b>${coincidents.join(', ')}</b>).`);
+                    } else if (contrasItem.length > 0) {
+                        avisos.push(`⚠️ <b>${item.nom_oficial}</b>: precaución/contraindicación registrada en ficha (<b>${contrasItem.join(', ')}</b>).`);
+                    } else {
+                        avisos.push(`ℹ️ <b>${item.nom_oficial}</b>: sin contraindicaciones específicas marcadas; verifica prospecto si tienes alergias.`);
+                    }
+                });
+
+                document.getElementById('llista-incompatibilitats-anonim').innerHTML = avisos.map(a => `<div>${a}</div>`).join('');
+                document.getElementById('chk-acceptar-venda-anonim').checked = false;
+                document.getElementById('modal-acceptacio-anonim').classList.remove('hidden');
+                return;
+            }
+
+            comprovarVendaCreuada();
+        }
+
+        function continuarDespresAcceptacioAnonim() {
+            const acceptat = document.getElementById('chk-acceptar-venda-anonim').checked;
+            if (!acceptat) {
+                alert("Debes marcar la casilla de aceptación para continuar con la compra sin perfil.");
+                return;
+            }
+            vendaAnonimAcceptada = true;
+            tancarModal('modal-acceptacio-anonim');
+            comprovarVendaCreuada();
+        }
 
         async function iniciarSessioCredencials() {
             const dni = document.getElementById('login-dni').value.trim();
@@ -615,28 +737,39 @@
 
         function actualitzarCapcaleraUsuari(u) {
             usuariActiu = u;
+            vendaAnonimAcceptada = false;
             document.getElementById('header-nom').innerText = `${u.nom_complet} (${u.dni_nie})`;
             document.getElementById('header-info').innerText = `Alergias: ${u.alergies || 'ninguna'} · Patologías: ${u.patologies || 'ninguna'}`;
             document.getElementById('btn-header-perfil').classList.remove('hidden');
             document.getElementById('btn-header-auth').innerText = "Cambiar Usuario";
             document.getElementById('btn-header-logout').classList.remove('hidden');
             document.getElementById('subtitol-inici').classList.add('hidden');
+            const boxAnon = document.getElementById('box-anonim-incompatibilitats');
+            if (boxAnon) boxAnon.classList.add('hidden');
         }
 
         function tancarSessio() {
             usuariActiu = null;
+            vendaAnonimAcceptada = false;
             document.getElementById('header-nom').innerText = "Usuario No Identificado";
             document.getElementById('header-info').innerText = "Inicia sesión o regístrate por seguridad clínica";
             document.getElementById('btn-header-perfil').classList.add('hidden');
             document.getElementById('btn-header-auth').innerText = "Iniciar Sesión";
             document.getElementById('btn-header-logout').classList.add('hidden');
             document.getElementById('subtitol-inici').classList.remove('hidden');
+            const boxAnon = document.getElementById('box-anonim-incompatibilitats');
+            if (boxAnon) boxAnon.classList.remove('hidden');
             anarA('inici');
         }
 
         async function obrirCatalegOTC() {
-            const res = await fetch('/api/medicaments/otc');
+            const query = usuariActiu ? `?dni_nie=${encodeURIComponent(usuariActiu.dni_nie)}` : '';
+            const res = await fetch(`/api/medicaments/otc${query}`);
             catalegOTC = await res.json();
+            const boxAnon = document.getElementById('box-anonim-incompatibilitats');
+            if (boxAnon) {
+                boxAnon.classList.toggle('hidden', Boolean(usuariActiu));
+            }
             pintarCategories();
             pintarProductes();
             anarA('otc');
@@ -699,6 +832,7 @@
         function afegirCistella(cn) {
             const med = catalegOTC.find(m => m.cn === cn);
             if (!med) return;
+            vendaAnonimAcceptada = false;
             const item = cistella.find(i => i.cn === cn);
             if (item) {
                 if (item.quantitat >= med.limit_unitats_venda) {
@@ -712,7 +846,11 @@
             actualitzarCistella();
         }
 
-        function buidarCistella() { cistella = []; actualitzarCistella(); }
+        function buidarCistella() {
+            cistella = [];
+            vendaAnonimAcceptada = false;
+            actualitzarCistella();
+        }
 
         function actualitzarCistella() {
             const cont = document.getElementById('llista-cistella');
@@ -748,6 +886,16 @@
                     break;
                 }
             }
+            if (!rec) {
+                for (const item of cistella) {
+                    const similarSegur = (item.similars || []).find(s => !cistella.some(c => c.cn === s.cn));
+                    if (similarSegur) {
+                        rec = similarSegur;
+                        break;
+                    }
+                }
+            }
+
             if (rec) {
                 document.getElementById('cs-nom').innerText = rec.nom_oficial;
                 document.getElementById('cs-preu').innerText = `+ ${rec.preu.toFixed(2)} €`;
@@ -769,7 +917,8 @@
         async function enviarDispensacioOTC(cnExtra) {
             tancarModal('modal-cross-sell');
             const items = cistella.map(i => ({ cn: i.cn, quantitat: i.quantitat }));
-            if (cnExtra) items.push({ cn: cnExtra, quantitat: 1 });
+            const acceptada = Boolean(cnExtra);
+            if (acceptada) items.push({ cn: cnExtra, quantitat: 1 });
 
             const res = await fetch('/api/dispensar', {
                 method: 'POST',
@@ -777,7 +926,8 @@
                 body: JSON.stringify({
                     dni_nie: usuariActiu ? usuariActiu.dni_nie : null,
                     items: items,
-                    tipus_venda: "Sin Receta (OTC)"
+                    tipus_venda: "Sin Receta (OTC)",
+                    te_venda_creuada: acceptada
                 })
             });
             const data = await res.json();

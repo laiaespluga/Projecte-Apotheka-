@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="ca">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>APOTHEKA · Panell Intern de Farmàcia</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-100 min-h-screen flex flex-col">
+
+    <!-- CAPÇALERA -->
+    <header class="bg-[#034172] text-white px-6 py-4 flex flex-wrap justify-between items-center gap-3 shadow-md">
+        <div class="flex items-center gap-3">
+            <span class="text-2xl bg-white text-[#034172] w-10 h-10 rounded-xl flex items-center justify-center font-black">+</span>
+            <div>
+                <h1 class="text-xl font-black tracking-tight">APOTHEKA · Gestió Interna Farmàcia</h1>
+                <p class="text-xs text-sky-100">Supervisió Robòtica · Guàrdies · Traçabilitat FEFO</p>
+            </div>
+        </div>
+        <div class="flex items-center gap-2.5">
+            <button onclick="carregarEstat()" class="bg-sky-800 hover:bg-sky-700 text-white text-xs font-bold px-3.5 py-2 rounded-xl border border-sky-400/40">
+                ↻ Actualitzar
+            </button>
+            <a href="/" class="bg-white text-[#034172] hover:bg-sky-50 text-xs font-extrabold px-4 py-2 rounded-xl shadow">
+                ← Quiosc Usuari
+            </a>
+        </div>
+    </header>
+
+    <main class="max-w-7xl w-full mx-auto p-6 space-y-6 flex-1">
+
+        <!-- 3. CUADRE DE RENDIBILITAT I ACTIVITAT -->
+        <section>
+            <h2 class="text-sm font-black uppercase tracking-wider text-slate-500 mb-3">Quadre d'Activitat i Rendibilitat</h2>
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
+                    <div class="text-xs font-bold text-slate-400 uppercase">Receptes QR Tramitades</div>
+                    <div id="kpi-qr" class="text-3xl font-black text-[#034172] mt-1">0</div>
+                    <div class="text-xs text-slate-500 mt-1">Dispensacions per codi QR</div>
+                </div>
+                <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
+                    <div class="text-xs font-bold text-slate-400 uppercase">Vendes 24/7 (OTC / Taulell)</div>
+                    <div id="kpi-247" class="text-3xl font-black text-emerald-600 mt-1">0</div>
+                    <div class="text-xs text-slate-500 mt-1">Operacions sense recepta</div>
+                </div>
+                <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
+                    <div class="text-xs font-bold text-slate-400 uppercase">Alertes Preventives Actives</div>
+                    <div id="kpi-alertes" class="text-3xl font-black text-amber-600 mt-1">0</div>
+                    <div class="text-xs text-slate-500 mt-1">Validacions, caducitats o baix estoc</div>
+                </div>
+                <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
+                    <div class="text-xs font-bold text-slate-400 uppercase">Impacte Venda Creuada</div>
+                    <div id="kpi-cross" class="text-3xl font-black text-indigo-600 mt-1">0</div>
+                    <div class="text-xs text-slate-500 mt-1">Comandes amb recomanació · <span id="kpi-facturacio" class="font-bold text-slate-700">0,00 €</span></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 1. SUPERVISIO DEL ROBOT I DISPENSACIO EN GUARDIES -->
+        <section class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+
+            <!-- Cua de comandes i validació farmacèutica -->
+            <div class="lg:col-span-7 bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
+                <div class="flex flex-wrap justify-between items-center gap-2 mb-4">
+                    <div>
+                        <h2 class="text-lg font-black text-slate-800">Cua de Comandes i Validació en Guàrdies</h2>
+                        <p class="text-xs text-slate-500">Entrades de taulell/24-7 i receptes QR exteriors amb revisió farmacèutica.</p>
+                    </div>
+                    <label class="inline-flex items-center gap-2 text-xs font-bold bg-amber-50 text-amber-800 px-3 py-1.5 rounded-xl border border-amber-200 cursor-pointer">
+                        <input id="chk-mode-guardia" type="checkbox" checked class="accent-amber-600 rounded">
+                        Mode Guàrdia Actiu
+                    </label>
+                </div>
+                <div id="cua-contenidor" class="space-y-3"></div>
+            </div>
+
+            <!-- Simulador del braç/mòdul robòtic -->
+            <div class="lg:col-span-5 bg-white p-6 rounded-3xl shadow-sm border border-slate-200 space-y-4">
+                <div class="flex justify-between items-center">
+                    <h2 class="text-lg font-black text-slate-800">Simulador Braç Robòtic</h2>
+                    <span id="robot-badge" class="text-xs font-extrabold px-3 py-1 rounded-full bg-emerald-100 text-emerald-800">OPERATIU</span>
+                </div>
+
+                <div id="robot-monitor" class="bg-slate-900 text-emerald-300 font-mono text-xs p-4 rounded-2xl space-y-1.5">
+                    <div>ESTAT: EN REPÒS · SENSE INCIDÈNCIES</div>
+                    <div>RUTA: [Magatzem FEFO] → [Braç Extractor] → [Comporta / Taulell]</div>
+                    <div>ENLLAÇ PMS: SINCRONITZAT</div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-2 text-xs">
+                    <button onclick="simularRutaRobot('Taulell Interior')" class="bg-[#034172] hover:bg-sky-800 text-white font-bold py-2.5 px-3 rounded-xl">
+                        ▶ Ruta a Taulell
+                    </button>
+                    <button onclick="simularRutaRobot('Comporta Exterior 24/7')" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 px-3 rounded-xl">
+                        ▶ Ruta a Comporta 24/7
+                    </button>
+                    <button onclick="simularBloqueigRobot()" class="bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 font-bold py-2.5 px-3 rounded-xl">
+                        ⚠ Simular Bloqueig
+                    </button>
+                    <button onclick="alliberarRobot()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 px-3 rounded-xl">
+                        ↺ Alliberar / Reiniciar
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- 2. CONTROL D'INVENTARI I TRAÇABILITAT FEFO -->
+        <section class="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
+            <div class="flex flex-wrap justify-between items-center gap-2 mb-4">
+                <div>
+                    <h2 class="text-lg font-black text-slate-800">Inventari i Caducitats (Criteri FEFO)</h2>
+                    <p class="text-xs text-slate-500">Ordenat de caducitat més propera a més llunyana. Es destaquen caducitats pròximes (&le;30 dies) i baix estoc (&le;5 unitats).</p>
+                </div>
+            </div>
+
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse text-sm">
+                    <thead>
+                        <tr class="border-b border-slate-200 text-xs uppercase text-slate-400">
+                            <th class="py-2.5 px-3">Prioritat FEFO</th>
+                            <th class="py-2.5 px-3">Medicament (CN)</th>
+                            <th class="py-2.5 px-3">Lot</th>
+                            <th class="py-2.5 px-3">Canal Robot</th>
+                            <th class="py-2.5 px-3">Caducitat</th>
+                            <th class="py-2.5 px-3">Estoc</th>
+                            <th class="py-2.5 px-3">Estat / Acció</th>
+                        </tr>
+                    </thead>
+                    <tbody id="taula-fefo" class="divide-y divide-slate-100"></tbody>
+                </table>
+            </div>
+        </section>
+
+    </main>
+
+    <script>
+        let robotBloquejat = false;
+
+        async function carregarEstat() {
+            const res = await fetch('/api/farmacia/estat');
+            if (!res.ok) return;
+            const data = await res.json();
+
+            document.getElementById('kpi-qr').innerText = data.kpis.receptes_qr_tramitades;
+            document.getElementById('kpi-247').innerText = data.kpis.vendes_24_7;
+            document.getElementById('kpi-alertes').innerText = data.kpis.alertes_preventives_actives;
+            document.getElementById('kpi-cross').innerText = data.kpis.comandes_venda_creuada;
+            document.getElementById('kpi-facturacio').innerText = data.kpis.facturacio_registrada.toFixed(2).replace('.', ',') + ' €';
+
+            pintarCua(data.cua);
+            pintarFEFO(data.lots_fefo);
+        }
+
+        function pintarCua(cua) {
+            const cont = document.getElementById('cua-contenidor');
+            if (!cua || cua.length === 0) {
+                cont.innerHTML = `<p class="text-sm text-slate-400 py-6 text-center">No hi ha comandes registrades a la cua.</p>`;
+                return;
+            }
+
+            cont.innerHTML = cua.map(c => {
+                const itemsText = (c.items || []).map(i => `${i.nom} (x${i.quantitat})`).join(', ') || 'Article';
+                const pendentValidar = c.requereix_validacio && !c.validada_farmaceutic && c.estat !== 'Rebutjada';
+
+                let badgeClass = 'bg-slate-100 text-slate-700';
+                if (c.estat === 'Dispensada') badgeClass = 'bg-emerald-100 text-emerald-800';
+                else if (c.estat === 'Rebutjada') badgeClass = 'bg-red-100 text-red-800';
+                else if (pendentValidar) badgeClass = 'bg-amber-100 text-amber-800';
+                else badgeClass = 'bg-sky-100 text-sky-800';
+
+                return `
+                    <div class="p-4 rounded-2xl border border-slate-200 bg-slate-50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div class="space-y-1">
+                            <div class="flex flex-wrap items-center gap-2">
+                                <span class="font-mono text-xs font-bold text-slate-500">#${c.id} · ${c.data_hora}</span>
+                                <span class="text-xs font-extrabold px-2.5 py-0.5 rounded-lg bg-white border text-slate-700">${c.origen}</span>
+                                <span class="text-xs font-extrabold px-2.5 py-0.5 rounded-full ${badgeClass}">${c.estat}</span>
+                                ${c.te_venda_creuada ? `<span class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800">Cross-selling</span>` : ''}
+                            </div>
+                            <div class="font-bold text-sm text-slate-800">${itemsText}</div>
+                            <div class="text-xs text-slate-500">
+                                Pacient: <b>${c.pacient_nom}</b> (${c.dni_nie})
+                                ${c.codi_qr ? `· QR: <span class="font-mono">${c.codi_qr}</span>` : ''}
+                                · Import: <b>${c.import_total.toFixed(2)} €</b>
+                            </div>
+                            ${(c.alergies_pacient || c.patologies_pacient || c.medicacio_pacient) ? `
+                                <div class="text-[11px] text-amber-900 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1 inline-block">
+                                    Historial: Al·lèrgies [${c.alergies_pacient || 'cap'}] · Patologies [${c.patologies_pacient || 'cap'}] · Medicació [${c.medicacio_pacient || 'cap'}]
+                                </div>
+                            ` : ''}
+                        </div>
+
+                        <div class="flex sm:flex-col gap-1.5 shrink-0">
+                            ${pendentValidar ? `
+                                <button onclick="validarComanda(${c.id})" class="bg-amber-600 hover:bg-amber-700 text-white text-xs font-extrabold px-3.5 py-2 rounded-xl">
+                                    ✓ Validar en guàrdia
+                                </button>
+                            ` : ''}
+                            ${c.estat !== 'Dispensada' && c.estat !== 'Rebutjada' ? `
+                                <button onclick="dispensarComanda(${c.id})" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold px-3.5 py-2 rounded-xl">
+                                    🤖 Dispensar
+                                </button>
+                                <button onclick="rebutjarComanda(${c.id})" class="bg-white hover:bg-red-50 text-red-600 border border-red-200 text-xs font-bold px-3 py-1.5 rounded-xl">
+                                    Rebutjar
+                                </button>
+                            ` : ''}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function pintarFEFO(lots) {
+            const tbody = document.getElementById('taula-fefo');
+            if (!lots || lots.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="7" class="py-6 text-center text-slate-400">Sense lots a l'inventari.</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = lots.map((l, idx) => {
+                const rowHighlight = (l.proper_caducar || l.baix_estoc) ? 'bg-amber-50/50' : '';
+                return `
+                    <tr class="${rowHighlight}">
+                        <td class="py-2.5 px-3">
+                            ${idx === 0
+                                ? `<span class="text-xs font-black px-2.5 py-1 rounded-full bg-amber-100 text-amber-900">1r FEFO</span>`
+                                : `<span class="text-xs font-semibold text-slate-500">#${idx + 1}</span>`
+                            }
+                        </td>
+                        <td class="py-2.5 px-3">
+                            <div class="font-bold text-slate-800">${l.nom_medicament}</div>
+                            <div class="text-xs font-mono text-slate-400">CN: ${l.cn}</div>
+                        </td>
+                        <td class="py-2.5 px-3 font-mono text-xs">${l.codi_lot}</td>
+                        <td class="py-2.5 px-3 font-mono text-xs">${l.canal_robot}</td>
+                        <td class="py-2.5 px-3">
+                            <span class="font-mono text-xs font-bold ${l.proper_caducar ? 'text-red-600' : 'text-slate-700'}">${l.data_caducitat}</span>
+                            ${l.proper_caducar ? `<span class="ml-1 text-[10px] font-black px-2 py-0.5 rounded bg-red-100 text-red-700">CADUCA AVIAT</span>` : ''}
+                        </td>
+                        <td class="py-2.5 px-3">
+                            <span class="font-bold ${l.baix_estoc ? 'text-amber-700' : 'text-slate-800'}">${l.quantitat} u.</span>
+                            ${l.baix_estoc ? `<span class="ml-1 text-[10px] font-black px-2 py-0.5 rounded bg-amber-100 text-amber-800">BAIX ESTOC</span>` : ''}
+                        </td>
+                        <td class="py-2.5 px-3">
+                            <button onclick="reabastirLot(${l.id})" class="bg-[#034172] hover:bg-sky-800 text-white text-xs font-bold px-3 py-1.5 rounded-xl">
+                                + Reabastir (+20 u.)
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function actualitzarMonitorRobot(textHtml, bloquejat) {
+            robotBloquejat = bloquejat;
+            const badge = document.getElementById('robot-badge');
+            const mon = document.getElementById('robot-monitor');
+            mon.innerHTML = textHtml;
+            if (bloquejat) {
+                badge.className = 'text-xs font-extrabold px-3 py-1 rounded-full bg-red-100 text-red-800';
+                badge.innerText = 'BLOQUEJAT';
+                mon.className = 'bg-red-950 text-red-200 font-mono text-xs p-4 rounded-2xl space-y-1.5';
+            } else {
+                badge.className = 'text-xs font-extrabold px-3 py-1 rounded-full bg-emerald-100 text-emerald-800';
+                badge.innerText = 'OPERATIU';
+                mon.className = 'bg-slate-900 text-emerald-300 font-mono text-xs p-4 rounded-2xl space-y-1.5';
+            }
+        }
+
+        function simularRutaRobot(desti) {
+            if (robotBloquejat) {
+                alert("El robot té una incidència activa. Prem 'Alliberar / Reiniciar' primer.");
+                return;
+            }
+            actualitzarMonitorRobot(`
+                <div>ESTAT: EXECUTANT RUTA ACTIVA</div>
+                <div>RUTA: [Lot FEFO Seleccionat] → [Braç] → [${desti}]</div>
+                <div>COMPORTA / LLIURAMENT: LLIURAMENT COMPLETAT</div>
+            `, false);
+        }
+
+        function simularBloqueigRobot() {
+            actualitzarMonitorRobot(`
+                <div>ESTAT: INCIDÈNCIA / BLOQUEIG DETECTAT</div>
+                <div>MOTIU: Sensor de comporta obstruït o pèrdua de comunicació</div>
+                <div>ACCIÓ REQUERIDA: Revisió del farmacèutic i reinici del mòdul</div>
+            `, true);
+        }
+
+        function alliberarRobot() {
+            actualitzarMonitorRobot(`
+                <div>ESTAT: EN REPÒS · SENSE INCIDÈNCIES</div>
+                <div>RUTA: [Magatzem FEFO] → [Braç Extractor] → [Comporta / Taulell]</div>
+                <div>ENLLAÇ PMS: SINCRONITZAT</div>
+            `, false);
+        }
+
+        async function validarComanda(id) {
+            const res = await fetch(`/api/farmacia/cua/${id}/validar`, { method: 'POST' });
+            if (res.ok) carregarEstat();
+        }
+
+        async function dispensarComanda(id) {
+            if (robotBloquejat) {
+                alert("Allibera el robot abans de dispensar.");
+                return;
+            }
+            const res = await fetch(`/api/farmacia/cua/${id}/dispensar`, { method: 'POST' });
+            if (!res.ok) {
+                const err = await res.json();
+                alert(err.detail);
+                return;
+            }
+            simularRutaRobot('Comanda Dispensada');
+            carregarEstat();
+        }
+
+        async function rebutjarComanda(id) {
+            const res = await fetch(`/api/farmacia/cua/${id}/rebutjar`, { method: 'POST' });
+            if (res.ok) carregarEstat();
+        }
+
+        async function reabastirLot(lotId) {
+            const res = await fetch(`/api/farmacia/lots/${lotId}/reabastir`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ quantitat_afegida: 20, dies_caducitat: 365 })
+            });
+            if (res.ok) carregarEstat();
+        }
+
+        carregarEstat();
+    </script>
+</body>
+</html>

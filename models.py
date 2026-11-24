@@ -90,5 +90,21 @@ class RegistreDispensacio(Base):
     tipus_venda = Column(String(50), nullable=False)
 
 
+class ComandaCua(Base):
+    __tablename__ = "comandes_cua"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    data_hora = Column(DateTime, default=datetime.utcnow)
+    origen = Column(String(30), nullable=False)  # "Taulell / 24-7" | "Recepta QR Exterior"
+    dni_nie = Column(String(15), nullable=True)
+    codi_qr = Column(String(50), nullable=True)
+    items_json = Column(Text, nullable=False)  # JSON string: [{"cn": "...", "quantitat": 1, "nom": "..."}]
+    import_total = Column(Float, default=0.0)
+    te_venda_creuada = Column(Boolean, default=False)
+    requereix_validacio = Column(Boolean, default=False)
+    validada_farmaceutic = Column(Boolean, default=False)
+    estat = Column(String(40), default="Pendent")  # "Pendent validació" | "Llest per dispensar" | "Dispensada" | "Rebutjada"
+
+
 def init_db():
     Base.metadata.create_all(bind=engine)

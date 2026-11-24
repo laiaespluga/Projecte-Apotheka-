@@ -1,4 +1,6 @@
+import json
 import unicodedata
+from datetime import datetime, timedelta
 from typing import List, Optional
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.staticfiles import StaticFiles
@@ -8,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from models import (
     SessionLocal, init_db, Usuari, Medicament,
-    LotInventari, ReceptaQR, RegistreDispensacio, CatalegClinic
+    LotInventari, ReceptaQR, RegistreDispensacio, CatalegClinic, ComandaCua
 )
 from sync_cima import (
     hash_password,
@@ -17,7 +19,7 @@ from sync_cima import (
     cercar_malalties_espanyol_temps_real
 )
 
-app = FastAPI(title="APOTHEKA Client Kiosk API")
+app = FastAPI(title="APOTHEKA Client Kiosk & Pharmacy API")
 init_db()
 
 
@@ -66,6 +68,12 @@ class ComandaRequest(BaseModel):
     items: List[ItemComanda]
     tipus_venda: str = "Sin Receta (OTC)"
     codi_qr: Optional[str] = None
+    te_venda_creuada: bool = False
+
+
+class ReabastirLotRequest(BaseModel):
+    quantitat_afegida: int = 20
+    dies_caducitat: int = 365
 
 
 @app.on_event("startup")
@@ -79,6 +87,11 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 @app.get("/")
 def index():
     return FileResponse("static/index.html")
+
+
+@app.get("/farmacia")
+def panell_farmacia():
+    return FileResponse("static/farmacia.html")
 
 
 @app.get("/api/cerca-clinica")
@@ -278,8 +291,25 @@ def actualitzar_usuari(dni_nie: str, dades: UsuariUpdate, db: Session = Depends(
         "empremta_token": usuari.empremta_token
     }
 
+
 @app.get("/api/medicaments/otc")
-def llistar_medicaments_otc(db: Session = Depends(get_db)):
+def llistar_medicaments_otc(dni_nie: Optional[str] = None, db: Session = Depends(get_db)):
+    usuari = None
+    if dni_nie:
+        usuari = db.query(Usuari).filter(Usuari.dni_nie == dni_nie.strip().upper()).first()
+
+    historial_norm = ""
+    if usuari:
+        historial_norm = normalitzar_text(
+            f"{usuari.alergies},{usuari.patologies},{usuari.medicacio_habitual}"
+        )
+
+    def es_compatible(med_obj: Medicament) -> bool:
+        if not historial_norm or not med_obj.contraindicacions:
+            return True
+        contras = [normalitzar_text(c.strip()) for c in med_obj.contraindicacions.split(",") if c.strip()]
+        return not any(c in historial_norm for c in contras)
+
     meds = db.query(Medicament).filter(Medicament.requereix_recepta == False).all()
     resultat = []
 
@@ -290,20 +320,36 @@ def llistar_medicaments_otc(db: Session = Depends(get_db)):
         cross_sell = None
         if m.recomanacio_creuada_cn:
             rec = db.query(Medicament).filter(Medicament.cn == m.recomanacio_creuada_cn).first()
-            if rec:
-                cross_sell = {
-                    "cn": rec.cn,
-                    "nom_oficial": rec.nom_oficial,
-                    "preu": rec.preu,
-                    "categoria": rec.categoria,
-                    "url_foto": rec.url_foto
-                }
+            if rec and es_compatible(rec):
+                rec_lots = db.query(LotInventari).filter(LotInventari.cn == rec.cn, LotInventari.quantitat > 0).all()
+                if sum(l.quantitat for l in rec_lots) > 0:
+                    cross_sell = {
+                        "cn": rec.cn,
+                        "nom_oficial": rec.nom_oficial,
+                        "preu": rec.preu,
+                        "categoria": rec.categoria,
+                        "url_foto": rec.url_foto
+                    }
 
-        similars = db.query(Medicament).filter(
+        candidates_similars = db.query(Medicament).filter(
             Medicament.requereix_recepta == False,
             Medicament.categoria == m.categoria,
             Medicament.cn != m.cn
-        ).limit(2).all()
+        ).all()
+
+        similars_segurs = []
+        for s in candidates_similars:
+            if not es_compatible(s):
+                continue
+            s_lots = db.query(LotInventari).filter(LotInventari.cn == s.cn, LotInventari.quantitat > 0).all()
+            if sum(l.quantitat for l in s_lots) > 0:
+                similars_segurs.append({
+                    "cn": s.cn,
+                    "nom_oficial": s.nom_oficial,
+                    "principi_actiu": s.principi_actiu,
+                    "preu": s.preu,
+                    "url_foto": s.url_foto
+                })
 
         resultat.append({
             "cn": m.cn,
@@ -316,11 +362,9 @@ def llistar_medicaments_otc(db: Session = Depends(get_db)):
             "preu": m.preu,
             "limit_unitats_venda": m.limit_unitats_venda,
             "estoc_total": estoc_total,
+            "contraindicacions": m.contraindicacions,
             "recomanacio_creuada": cross_sell,
-            "similars": [
-                {"cn": s.cn, "nom_oficial": s.nom_oficial, "preu": s.preu, "url_foto": s.url_foto}
-                for s in similars
-            ]
+            "similars": similars_segurs[:3]
         })
     return resultat
 
@@ -357,12 +401,21 @@ def processar_dispensacio(comanda: ComandaRequest, db: Session = Depends(get_db)
         usuari = db.query(Usuari).filter(Usuari.dni_nie == comanda.dni_nie.strip().upper()).first()
 
     alertes = []
+    detall_items = []
+    import_total = 0.0
+    requereix_validacio = bool(comanda.codi_qr)
 
     for item in comanda.items:
         med = db.query(Medicament).filter(Medicament.cn == item.cn).first()
         if not med:
             alertes.append(f"Medicamento {item.cn} no encontrado.")
             continue
+
+        if med.requereix_recepta:
+            requereix_validacio = True
+
+        import_total += med.preu * item.quantitat
+        detall_items.append({"cn": med.cn, "quantitat": item.quantitat, "nom": med.nom_oficial})
 
         if item.quantitat > med.limit_unitats_venda:
             alertes.append(
@@ -425,5 +478,141 @@ def processar_dispensacio(comanda: ComandaRequest, db: Session = Depends(get_db)
         if rec:
             rec.dispensada = True
 
+    origen_cua = "Recepta QR Exterior" if comanda.codi_qr else "Taulell / 24-7"
+    estat_inicial = "Pendent validació" if requereix_validacio else "Llest per dispensar"
+
+    nova_cua = ComandaCua(
+        origen=origen_cua,
+        dni_nie=usuari.dni_nie if usuari else "ANÓNIMO",
+        codi_qr=comanda.codi_qr.strip().upper() if comanda.codi_qr else None,
+        items_json=json.dumps(detall_items, ensure_ascii=False),
+        import_total=round(import_total, 2),
+        te_venda_creuada=comanda.te_venda_creuada,
+        requereix_validacio=requereix_validacio,
+        validada_farmaceutic=not requereix_validacio,
+        estat=estat_inicial
+    )
+    db.add(nova_cua)
+
     db.commit()
-    return {"ok": True, "moviments": moviments}
+    return {"ok": True, "moviments": moviments, "comanda_cua_id": nova_cua.id}
+
+
+# --- ENDPOINTS PANELL INTERN DE FARMÀCIA ---
+
+@app.get("/api/farmacia/estat")
+def obtenir_estat_farmacia(db: Session = Depends(get_db)):
+    cua_rows = db.query(ComandaCua).order_by(ComandaCua.id.desc()).all()
+    cua_list = []
+    for c in cua_rows:
+        try:
+            items = json.loads(c.items_json)
+        except Exception:
+            items = []
+        usuari = db.query(Usuari).filter(Usuari.dni_nie == c.dni_nie).first() if c.dni_nie and c.dni_nie != "ANÓNIMO" else None
+        cua_list.append({
+            "id": c.id,
+            "data_hora": c.data_hora.strftime("%H:%M:%S") if c.data_hora else "",
+            "origen": c.origen,
+            "dni_nie": c.dni_nie or "ANÓNIMO",
+            "pacient_nom": usuari.nom_complet if usuari else "Usuari anònim",
+            "alergies_pacient": usuari.alergies if usuari else "",
+            "patologies_pacient": usuari.patologies if usuari else "",
+            "medicacio_pacient": usuari.medicacio_habitual if usuari else "",
+            "codi_qr": c.codi_qr,
+            "items": items,
+            "import_total": c.import_total,
+            "te_venda_creuada": c.te_venda_creuada,
+            "requereix_validacio": c.requereix_validacio,
+            "validada_farmaceutic": c.validada_farmaceutic,
+            "estat": c.estat
+        })
+
+    lots_rows = db.query(LotInventari).order_by(LotInventari.data_caducitat.asc()).all()
+    avui_str = datetime.now().strftime("%Y-%m-%d")
+    limit_30d_str = (datetime.now() + timedelta(days=30)).strftime("%Y-%m-%d")
+
+    lots_list = []
+    for l in lots_rows:
+        med = db.query(Medicament).filter(Medicament.cn == l.cn).first()
+        proper_caducar = l.data_caducitat <= limit_30d_str
+        baix_estoc = l.quantitat <= 5
+        lots_list.append({
+            "id": l.id,
+            "cn": l.cn,
+            "nom_medicament": med.nom_oficial if med else l.cn,
+            "categoria": med.categoria if med else "",
+            "codi_lot": l.codi_lot,
+            "data_caducitat": l.data_caducitat,
+            "quantitat": l.quantitat,
+            "canal_robot": l.canal_robot,
+            "proper_caducar": proper_caducar,
+            "baix_estoc": baix_estoc
+        })
+
+    dispensacions = db.query(RegistreDispensacio).all()
+    qr_tramitades = sum(1 for d in dispensacions if "QR" in (d.tipus_venda or ""))
+    vendes_24_7 = sum(1 for d in dispensacions if "QR" not in (d.tipus_venda or ""))
+    alertes_actives = sum(1 for l in lots_list if l["proper_caducar"] or l["baix_estoc"]) + sum(
+        1 for c in cua_rows if c.requereix_validacio and not c.validada_farmaceutic
+    )
+    comandes_cross_sell = sum(1 for c in cua_rows if c.te_venda_creuada)
+    facturacio_registrada = sum(c.import_total for c in cua_rows if c.estat == "Dispensada")
+
+    return {
+        "cua": cua_list,
+        "lots_fefo": lots_list,
+        "kpis": {
+            "receptes_qr_tramitades": qr_tramitades,
+            "vendes_24_7": vendes_24_7,
+            "alertes_preventives_actives": alertes_actives,
+            "comandes_venda_creuada": comandes_cross_sell,
+            "facturacio_registrada": round(facturacio_registrada, 2),
+            "data_referencia": avui_str
+        }
+    }
+
+
+@app.post("/api/farmacia/cua/{comanda_id}/validar")
+def validar_comanda_farmacia(comanda_id: int, db: Session = Depends(get_db)):
+    c = db.query(ComandaCua).filter(ComandaCua.id == comanda_id).first()
+    if not c:
+        raise HTTPException(status_code=404, detail="Comanda no trobada.")
+    c.validada_farmaceutic = True
+    c.estat = "Llest per dispensar"
+    db.commit()
+    return {"ok": True, "estat": c.estat}
+
+
+@app.post("/api/farmacia/cua/{comanda_id}/dispensar")
+def dispensar_comanda_farmacia(comanda_id: int, db: Session = Depends(get_db)):
+    c = db.query(ComandaCua).filter(ComandaCua.id == comanda_id).first()
+    if not c:
+        raise HTTPException(status_code=404, detail="Comanda no trobada.")
+    if c.requereix_validacio and not c.validada_farmaceutic:
+        raise HTTPException(status_code=400, detail="Cal validar la dispensació abans de lliurar en guàrdia.")
+    c.estat = "Dispensada"
+    db.commit()
+    return {"ok": True, "estat": c.estat}
+
+
+@app.post("/api/farmacia/cua/{comanda_id}/rebutjar")
+def rebutjar_comanda_farmacia(comanda_id: int, db: Session = Depends(get_db)):
+    c = db.query(ComandaCua).filter(ComandaCua.id == comanda_id).first()
+    if not c:
+        raise HTTPException(status_code=404, detail="Comanda no trobada.")
+    c.estat = "Rebutjada"
+    db.commit()
+    return {"ok": True, "estat": c.estat}
+
+
+@app.post("/api/farmacia/lots/{lot_id}/reabastir")
+def reabastir_lot_fefo(lot_id: int, dades: ReabastirLotRequest, db: Session = Depends(get_db)):
+    lot = db.query(LotInventari).filter(LotInventari.id == lot_id).first()
+    if not lot:
+        raise HTTPException(status_code=404, detail="Lot no trobat.")
+    lot.quantitat += max(1, dades.quantitat_afegida)
+    nova_cad = datetime.now() + timedelta(days=max(30, dades.dies_caducitat))
+    lot.data_caducitat = nova_cad.strftime("%Y-%m-%d")
+    db.commit()
+    return {"ok": True, "quantitat": lot.quantitat, "data_caducitat": lot.data_caducitat}
