@@ -1,0 +1,857 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>APOTHEKA · Autoservicio Farmacéutico</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: 'Inter', system-ui, -apple-system, sans-serif; user-select: none; }
+        .touch-btn:active { transform: scale(0.98); }
+        @keyframes pulse-ring {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(13, 148, 136, 0.7); }
+            70% { transform: scale(1); box-shadow: 0 0 0 18px rgba(13, 148, 136, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(13, 148, 136, 0); }
+        }
+        .fingerprint-pulse { animation: pulse-ring 2s infinite; }
+    </style>
+</head>
+<body class="bg-slate-100 h-screen flex flex-col overflow-hidden">
+
+    <!-- CABECERA SUPERIOR -->
+    <header class="bg-teal-700 text-white px-6 py-4 flex justify-between items-center shadow-md z-20">
+        <div class="flex items-center gap-3 cursor-pointer" onclick="anarA('inici')">
+            <span class="text-3xl bg-white text-teal-700 w-11 h-11 rounded-2xl flex items-center justify-center font-black shadow">+</span>
+            <div>
+                <h1 class="text-2xl font-black tracking-tight">APOTHEKA</h1>
+                <p class="text-xs text-teal-100">Conectado a CIMA AEMPS · Dispensación Robotizada</p>
+            </div>
+        </div>
+
+        <!-- ESTADO DE SESIÓN CON 3 ACCIONES: MI PERFIL / CAMBIAR USUARIO / SALIR -->
+        <div class="flex items-center gap-2.5 bg-teal-800 px-4 py-2 rounded-2xl border border-teal-500">
+            <div class="text-right mr-1">
+                <div id="header-nom" class="font-bold text-sm">Usuario No Identificado</div>
+                <div id="header-info" class="text-xs text-teal-200">Inicia sesión o regístrate por seguridad clínica</div>
+            </div>
+            <button id="btn-header-perfil" onclick="obrirPaginaEdicioPerfil()" class="hidden bg-white text-teal-800 font-extrabold text-xs px-4 py-2.5 rounded-xl hover:bg-teal-50 shadow transition flex items-center gap-1.5">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
+                Mi Perfil
+            </button>
+            <button id="btn-header-auth" onclick="anarA('login')" class="bg-white text-teal-800 font-extrabold text-xs px-4 py-2.5 rounded-xl hover:bg-teal-50 shadow transition">
+                Iniciar Sesión
+            </button>
+            <button id="btn-header-logout" onclick="tancarSessio()" class="hidden bg-red-500/85 hover:bg-red-500 text-white font-bold text-xs px-3.5 py-2.5 rounded-xl transition">
+                Salir
+            </button>
+        </div>
+    </header>
+
+    <!-- VISTA 1: SELECCIÓN INICIAL -->
+    <main id="vista-inici" class="flex-1 flex flex-col items-center justify-center p-8">
+        <div class="text-center max-w-2xl mb-10">
+            <h2 class="text-4xl font-black text-slate-800">¿Qué operación deseas realizar?</h2>
+            <p id="subtitol-inici" class="text-slate-500 mt-2 text-lg">Identifícate con tu huella dactilar o DNI/NIE para validar incompatibilidades médicas.</p>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8 w-full max-w-4xl">
+            <button onclick="obrirCatalegOTC()" class="touch-btn bg-white p-10 rounded-3xl shadow-xl border-4 border-transparent hover:border-teal-500 flex flex-col items-center text-center transition">
+                <div class="w-24 h-24 bg-teal-100 text-teal-700 rounded-full flex items-center justify-center text-5xl mb-5">🛒</div>
+                <h3 class="text-3xl font-black text-slate-800">Sin Receta</h3>
+                <p class="text-slate-500 mt-2">Medicamentos OTC, alivio de síntomas y recomendaciones personalizadas</p>
+                <span class="mt-6 bg-teal-600 text-white font-bold py-3.5 px-6 rounded-2xl w-full text-lg">Explorar Catálogo →</span>
+            </button>
+
+            <button onclick="anarA('qr')" class="touch-btn bg-white p-10 rounded-3xl shadow-xl border-4 border-transparent hover:border-indigo-500 flex flex-col items-center text-center transition">
+                <div class="w-24 h-24 bg-indigo-100 text-indigo-700 rounded-full flex items-center justify-center text-5xl mb-5">📱</div>
+                <h3 class="text-3xl font-black text-slate-800">Con Receta Médica</h3>
+                <p class="text-slate-500 mt-2">Requiere la lectura del código QR de tu receta electrónica</p>
+                <span class="mt-6 bg-indigo-600 text-white font-bold py-3.5 px-6 rounded-2xl w-full text-lg">Escanear Código QR →</span>
+            </button>
+        </div>
+    </main>
+
+    <!-- VISTA 2: INICIO DE SESIÓN -->
+    <main id="vista-login" class="hidden flex-1 flex items-center justify-center p-6 overflow-y-auto">
+        <div class="bg-white rounded-3xl shadow-xl max-w-4xl w-full grid grid-cols-1 md:grid-cols-2 overflow-hidden border border-slate-200">
+            
+            <div class="bg-teal-50 p-10 flex flex-col items-center justify-center text-center border-b md:border-b-0 md:border-r border-teal-100">
+                <span class="bg-teal-200/70 text-teal-900 text-xs font-black px-3 py-1 rounded-full uppercase tracking-wider mb-4">Acceso Biométrico Rápido</span>
+                <h3 class="text-2xl font-black text-slate-800">Inicio con Huella Dactilar</h3>
+                <p class="text-slate-500 text-sm mt-2 mb-6">Coloca el dedo en el sensor de la máquina para acceder a tu perfil médico al instante.</p>
+
+                <button onclick="simularLecturaEmpremta()" class="fingerprint-pulse w-32 h-32 rounded-full bg-white border-4 border-teal-500 flex flex-col items-center justify-center shadow-lg hover:bg-teal-600 hover:text-white text-teal-600 transition group">
+                    <svg class="w-16 h-16" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 11c0 3.517-1.009 6.799-2.753 9.571m-3.44-2.04l.054-.09A13.916 13.916 0 008 11a4 4 0 118 0c0 1.017-.07 2.019-.203 3m-2.118 6.844A21.88 21.88 0 0015.171 17m3.839 1.132c.645-2.266.99-4.659.99-7.132A8 8 0 008 4.07M3 15.364c.64-1.319 1-2.8 1-4.364 0-1.457.39-2.823 1.07-4" />
+                    </svg>
+                    <span class="text-[10px] font-black uppercase mt-1">Tocar Sensor</span>
+                </button>
+
+                <div id="estat-empremta" class="mt-4 text-xs font-bold text-teal-700 min-h-[20px]"></div>
+
+                <div class="mt-4 pt-4 border-t border-teal-200/60 w-full">
+                    <span class="text-[11px] text-slate-400 block mb-2">Simular huella de usuario registrado:</span>
+                    <div class="flex flex-wrap justify-center gap-1.5 text-xs">
+                        <button onclick="loginEmpremtaDirecta('FP-X1234567C')" class="bg-white border border-teal-200 px-2.5 py-1 rounded-lg font-semibold text-slate-700 hover:bg-teal-100">Josep (Úlcera/HTA)</button>
+                        <button onclick="loginEmpremtaDirecta('FP-87654321B')" class="bg-white border border-teal-200 px-2.5 py-1 rounded-lg font-semibold text-slate-700 hover:bg-teal-100">Laia (Embarazo)</button>
+                        <button onclick="loginEmpremtaDirecta('FP-12345678A')" class="bg-white border border-teal-200 px-2.5 py-1 rounded-lg font-semibold text-slate-700 hover:bg-teal-100">Marc (Alergia)</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="p-10 flex flex-col justify-between">
+                <div>
+                    <div class="flex justify-between items-center mb-6">
+                        <h3 class="text-2xl font-black text-slate-800">Iniciar Sesión</h3>
+                        <button onclick="anarA('inici')" class="text-sm font-bold text-slate-400 hover:text-slate-700">← Volver</button>
+                    </div>
+
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-xs font-bold uppercase text-slate-500 mb-1">DNI o NIE</label>
+                            <input id="login-dni" type="text" placeholder="Ej: 12345678A" class="w-full border-2 border-slate-200 focus:border-teal-500 rounded-xl px-4 py-3 uppercase font-mono outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Contraseña</label>
+                            <input id="login-pass" type="password" placeholder="••••••••" class="w-full border-2 border-slate-200 focus:border-teal-500 rounded-xl px-4 py-3 outline-none">
+                        </div>
+                        <p class="text-[11px] text-slate-400">Contraseña de los usuarios de prueba: <code class="bg-slate-100 px-1.5 py-0.5 rounded font-bold">1234</code></p>
+
+                        <button onclick="iniciarSessioCredencials()" class="w-full bg-teal-600 hover:bg-teal-700 text-white font-black py-3.5 rounded-2xl text-lg shadow-md transition">
+                            Entrar a mi Perfil
+                        </button>
+                    </div>
+                </div>
+
+                <div class="mt-8 pt-6 border-t border-slate-200 text-center">
+                    <p class="text-sm text-slate-600">¿Aún no tienes cuenta en APOTHEKA?</p>
+                    <button onclick="obrirPaginaRegistre()" class="mt-2 w-full bg-slate-800 hover:bg-slate-900 text-white font-bold py-3 rounded-2xl text-sm transition">
+                        Registrarme ahora (Crear Perfil Médico) →
+                    </button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- VISTA 3: REGISTRO / EDICIÓN DE PERFIL CLÍNICO -->
+    <main id="vista-registre" class="hidden flex-1 overflow-y-auto p-6">
+        <div class="max-w-3xl mx-auto bg-white rounded-3xl shadow-xl p-8 md:p-10 border border-slate-200 my-2">
+            <div class="flex justify-between items-center mb-6 pb-4 border-b">
+                <div>
+                    <span id="form-perfil-badge" class="text-xs font-black uppercase text-teal-600">Nuevo Perfil Clínico</span>
+                    <h2 id="form-perfil-titol" class="text-3xl font-black text-slate-800">Registro de Usuario APOTHEKA</h2>
+                </div>
+                <button id="btn-form-tornar" onclick="anarA('login')" class="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-4 py-2 rounded-xl text-sm">
+                    ← Volver
+                </button>
+            </div>
+
+            <div class="space-y-6">
+                <div>
+                    <h4 class="font-extrabold text-slate-700 mb-3 flex items-center gap-2"><span>🪪</span> 1. Datos Personales y Seguridad</h4>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                            <label class="block text-xs font-bold text-slate-500 mb-1">DNI o NIE *</label>
+                            <input id="reg-dni" type="text" placeholder="Ej: 47891234Z" class="w-full border-2 border-slate-200 focus:border-teal-500 disabled:bg-slate-100 disabled:text-slate-500 rounded-xl px-3.5 py-2.5 uppercase font-mono outline-none">
+                        </div>
+                        <div class="md:col-span-2">
+                            <label class="block text-xs font-bold text-slate-500 mb-1">Nombre y Apellidos *</label>
+                            <input id="reg-nom" type="text" placeholder="Nombre completo" class="w-full border-2 border-slate-200 focus:border-teal-500 rounded-xl px-3.5 py-2.5 outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-slate-500 mb-1">Edad *</label>
+                            <input id="reg-edat" type="number" min="1" max="120" value="30" class="w-full border-2 border-slate-200 focus:border-teal-500 rounded-xl px-3.5 py-2.5 outline-none">
+                        </div>
+                        <div class="md:col-span-2">
+                            <label id="label-reg-pass" class="block text-xs font-bold text-slate-500 mb-1">Contraseña de acceso *</label>
+                            <input id="reg-pass" type="password" placeholder="Crea una contraseña segura" class="w-full border-2 border-slate-200 focus:border-teal-500 rounded-xl px-3.5 py-2.5 outline-none">
+                        </div>
+                    </div>
+
+                    <div class="mt-4 bg-teal-50 border border-teal-200 rounded-2xl p-4 flex items-center justify-between">
+                        <div class="flex items-center gap-3">
+                            <span class="text-3xl">☝️</span>
+                            <div>
+                                <div class="font-bold text-sm text-teal-900">Vincular Huella Dactilar al perfil</div>
+                                <div class="text-xs text-teal-700">Permite identificarte en futuras visitas sin escribir DNI ni contraseña.</div>
+                            </div>
+                        </div>
+                        <label class="inline-flex items-center cursor-pointer">
+                            <input id="reg-empremta" type="checkbox" checked class="w-6 h-6 accent-teal-600 rounded">
+                        </label>
+                    </div>
+                </div>
+
+                <div class="pb-16">
+                    <h4 class="font-extrabold text-slate-700 mb-1 flex items-center gap-2"><span>🩺</span> 2. Historial Médico</h4>
+                    <p class="text-xs text-slate-500 mb-4">Selecciona las opciones frecuentes en un clic o escribe para buscar en la base de datos oficial:</p>
+
+                    <!-- BUSCADOR 1: ALERGIAS -->
+                    <div class="mb-6">
+                        <label class="block text-xs font-bold uppercase text-slate-600 mb-1">Alergias e Intolerancias</label>
+                        <div id="tags-alergies" class="flex flex-wrap gap-1.5 mb-2"></div>
+                        <input id="search-alergies" oninput="filtrarSuggeriments('alergies')" onfocus="filtrarSuggeriments('alergies')" type="text" autocomplete="off"
+                               placeholder="🔍 Escribe o selecciona abajo (ej: gluten, lactosa, penicilina, ibuprofeno...)" 
+                               class="w-full border-2 border-slate-200 focus:border-teal-500 rounded-xl px-4 py-3 text-sm outline-none">
+                        <div id="dropdown-alergies" class="hidden bg-white border-2 border-teal-500 rounded-xl shadow-lg mt-1 max-h-52 overflow-y-auto"></div>
+                        <div class="flex flex-wrap gap-1.5 mt-2">
+                            <span class="text-[11px] text-slate-400 py-1">Frecuentes:</span>
+                            <button type="button" onclick="afegirTagClinic('alergies', 'gluten', 'Gluten / Celiaquía')" class="text-xs bg-slate-100 hover:bg-teal-100 text-slate-700 font-semibold px-2.5 py-1 rounded-lg">+ Gluten</button>
+                            <button type="button" onclick="afegirTagClinic('alergies', 'lactosa', 'Lactosa')" class="text-xs bg-slate-100 hover:bg-teal-100 text-slate-700 font-semibold px-2.5 py-1 rounded-lg">+ Lactosa</button>
+                            <button type="button" onclick="afegirTagClinic('alergies', 'penicilina', 'Penicilina / Amoxicilina')" class="text-xs bg-slate-100 hover:bg-teal-100 text-slate-700 font-semibold px-2.5 py-1 rounded-lg">+ Penicilina</button>
+                            <button type="button" onclick="afegirTagClinic('alergies', 'ibuprofeno', 'Ibuprofeno / AINEs')" class="text-xs bg-slate-100 hover:bg-teal-100 text-slate-700 font-semibold px-2.5 py-1 rounded-lg">+ Ibuprofeno</button>
+                            <button type="button" onclick="afegirTagClinic('alergies', 'aspirina', 'Aspirina (AAS)')" class="text-xs bg-slate-100 hover:bg-teal-100 text-slate-700 font-semibold px-2.5 py-1 rounded-lg">+ Aspirina</button>
+                        </div>
+                    </div>
+
+                    <!-- BUSCADOR 2: PATOLOGÍAS -->
+                    <div class="mb-6">
+                        <label class="block text-xs font-bold uppercase text-slate-600 mb-1">Patologías o Condiciones Médicas</label>
+                        <div id="tags-patologies" class="flex flex-wrap gap-1.5 mb-2"></div>
+                        <input id="search-patologies" oninput="filtrarSuggeriments('patologies')" onfocus="filtrarSuggeriments('patologies')" type="text" autocomplete="off"
+                               placeholder="🔍 Escribe o selecciona abajo (ej: embarazo, arritmia, hipertensión, úlcera...)" 
+                               class="w-full border-2 border-slate-200 focus:border-teal-500 rounded-xl px-4 py-3 text-sm outline-none">
+                        <div id="dropdown-patologies" class="hidden bg-white border-2 border-teal-500 rounded-xl shadow-lg mt-1 max-h-52 overflow-y-auto"></div>
+                        <div class="flex flex-wrap gap-1.5 mt-2">
+                            <span class="text-[11px] text-slate-400 py-1">Frecuentes:</span>
+                            <button type="button" onclick="afegirTagClinic('patologies', 'embarazo', 'Embarazo')" class="text-xs bg-slate-100 hover:bg-teal-100 text-slate-700 font-semibold px-2.5 py-1 rounded-lg">+ Embarazo</button>
+                            <button type="button" onclick="afegirTagClinic('patologies', 'hipertension', 'Hipertensión arterial')" class="text-xs bg-slate-100 hover:bg-teal-100 text-slate-700 font-semibold px-2.5 py-1 rounded-lg">+ Hipertensión</button>
+                            <button type="button" onclick="afegirTagClinic('patologies', 'ulcera', 'Úlcera / Gastritis')" class="text-xs bg-slate-100 hover:bg-teal-100 text-slate-700 font-semibold px-2.5 py-1 rounded-lg">+ Úlcera gástrica</button>
+                            <button type="button" onclick="afegirTagClinic('patologies', 'arritmia', 'Arritmia cardíaca')" class="text-xs bg-slate-100 hover:bg-teal-100 text-slate-700 font-semibold px-2.5 py-1 rounded-lg">+ Arritmia</button>
+                            <button type="button" onclick="afegirTagClinic('patologies', 'diabetes', 'Diabetes')" class="text-xs bg-slate-100 hover:bg-teal-100 text-slate-700 font-semibold px-2.5 py-1 rounded-lg">+ Diabetes</button>
+                            <button type="button" onclick="afegirTagClinic('patologies', 'asma', 'Asma')" class="text-xs bg-slate-100 hover:bg-teal-100 text-slate-700 font-semibold px-2.5 py-1 rounded-lg">+ Asma</button>
+                        </div>
+                    </div>
+
+                    <!-- BUSCADOR 3: MEDICACIÓN HABITUAL -->
+                    <div class="mb-4">
+                        <label class="block text-xs font-bold uppercase text-slate-600 mb-1">Medicación Habitual (Catálogo Oficial CIMA AEMPS)</label>
+                        <div id="tags-medicacio" class="flex flex-wrap gap-1.5 mb-2"></div>
+                        <input id="search-medicacio" oninput="filtrarSuggeriments('medicacio')" onfocus="filtrarSuggeriments('medicacio')" type="text" autocomplete="off"
+                               placeholder="🔍 Escribe el nombre del medicamento (ej: enalapril, sintrom, omeprazol...)" 
+                               class="w-full border-2 border-slate-200 focus:border-teal-500 rounded-xl px-4 py-3 text-sm outline-none">
+                        <div id="dropdown-medicacio" class="hidden bg-white border-2 border-teal-500 rounded-xl shadow-lg mt-1 max-h-52 overflow-y-auto"></div>
+                    </div>
+                </div>
+
+                <button id="btn-guardar-perfil" onclick="guardarFormulariPerfil()" class="w-full bg-teal-600 hover:bg-teal-700 text-white font-black py-4 rounded-2xl text-lg shadow-lg transition">
+                    Finalizar Registro y Acceder →
+                </button>
+            </div>
+        </div>
+    </main>
+
+    <!-- VISTA 4: CATÁLOGO SIN RECETA -->
+    <main id="vista-otc" class="hidden flex-1 flex overflow-hidden">
+        <div class="flex-1 flex flex-col p-6 overflow-y-auto">
+            <div class="flex flex-wrap gap-3 mb-5">
+                <button onclick="anarA('inici')" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold px-4 py-2.5 rounded-xl">← Inicio</button>
+                <input id="cerca-otc" oninput="pintarProductes()" type="text" placeholder="🔍 Buscar medicamento o principio activo..." 
+                       class="flex-1 min-w-[240px] bg-white border-2 border-slate-200 focus:border-teal-500 rounded-xl px-4 py-2.5 outline-none">
+                <div id="filtres-categoria" class="flex gap-2 overflow-x-auto"></div>
+            </div>
+            <div id="graella-otc" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 pb-8"></div>
+        </div>
+
+        <aside class="w-96 bg-white border-l border-slate-200 flex flex-col shadow-xl">
+            <div class="p-5 bg-slate-800 text-white flex justify-between items-center">
+                <h3 class="text-lg font-extrabold">🛍️ Cesta de Compra</h3>
+                <button onclick="buidarCistella()" class="text-xs text-slate-300 hover:text-white underline">Vaciar</button>
+            </div>
+            <div id="llista-cistella" class="flex-1 p-4 overflow-y-auto space-y-3"></div>
+            <div class="p-5 bg-slate-50 border-t border-slate-200">
+                <div class="flex justify-between text-2xl font-black text-slate-900 mb-4">
+                    <span>Total</span>
+                    <span id="total-cistella">0,00 €</span>
+                </div>
+                <button id="btn-confirmar-otc" onclick="comprovarVendaCreuada()" disabled
+                        class="w-full bg-teal-600 disabled:bg-slate-300 hover:bg-teal-700 text-white font-black py-4 rounded-2xl text-lg shadow">
+                    Confirmar Pedido →
+                </button>
+            </div>
+        </aside>
+    </main>
+
+    <!-- VISTA 5: VENTA CON RECETA QR -->
+    <main id="vista-qr" class="hidden flex-1 flex flex-col items-center justify-center p-8">
+        <div class="bg-white p-10 rounded-3xl shadow-xl max-w-xl w-full text-center border border-slate-200">
+            <button onclick="anarA('inici')" class="text-slate-400 hover:text-slate-700 font-bold mb-4 block">← Volver</button>
+            <div class="text-6xl mb-3">📷</div>
+            <h2 class="text-3xl font-black text-slate-800">Lectura Obligatoria de Código QR</h2>
+            <p class="text-slate-500 mt-2 text-sm">Para dispensar medicamentos sujetos a prescripción médica es necesario validar el código QR de la receta electrónica.</p>
+
+            <div class="mt-6 flex gap-2">
+                <input id="input-codi-qr" type="text" placeholder="Ej: QR-APOTHEKA-01" 
+                       class="flex-1 border-2 border-indigo-300 rounded-2xl px-4 py-3 text-lg font-mono uppercase text-center outline-none focus:border-indigo-600">
+                <button onclick="consultarQR()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-6 py-3 rounded-2xl">
+                    Validar QR
+                </button>
+            </div>
+
+            <div class="mt-4 flex flex-wrap justify-center gap-2 text-xs">
+                <span class="text-slate-400 py-1">Códigos de prueba:</span>
+                <button onclick="testQR('QR-APOTHEKA-01')" class="bg-red-50 text-red-700 border border-red-200 px-2.5 py-1 rounded-lg font-bold">QR-APOTHEKA-01 (Alergia)</button>
+                <button onclick="testQR('QR-APOTHEKA-02')" class="bg-emerald-50 text-emerald-700 border border-emerald-200 px-2.5 py-1 rounded-lg font-bold">QR-APOTHEKA-02 (Válida)</button>
+                <button onclick="testQR('QR-APOTHEKA-03')" class="bg-amber-50 text-amber-700 border border-amber-200 px-2.5 py-1 rounded-lg font-bold">QR-APOTHEKA-03 (Úlcera)</button>
+            </div>
+
+            <div id="detall-qr" class="hidden mt-6 text-left bg-slate-50 p-5 rounded-2xl border border-slate-200"></div>
+        </div>
+    </main>
+
+    <!-- MODALES -->
+    <div id="modal-cross-sell" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
+        <div class="bg-white rounded-3xl max-w-md w-full p-8 text-center shadow-2xl border-4 border-teal-500">
+            <span class="bg-teal-100 text-teal-800 text-xs font-black px-3 py-1 rounded-full uppercase">Recomendación Farmacéutica</span>
+            <img id="cs-img" src="" alt="" class="w-28 h-28 object-contain mx-auto my-4 hidden">
+            <div id="cs-fallback-icon" class="text-6xl my-4">🛡️</div>
+            <h3 class="text-xl font-black text-slate-800">¿Quieres complementar tu compra?</h3>
+            <p id="cs-nom" class="text-slate-600 mt-2 text-sm font-medium"></p>
+            <div id="cs-preu" class="text-3xl font-black text-teal-600 my-3"></div>
+            <div class="space-y-2.5 mt-4">
+                <button id="btn-afegir-cs" class="w-full bg-teal-600 hover:bg-teal-700 text-white font-black py-3.5 rounded-2xl">Sí, añadir y dispensar</button>
+                <button onclick="enviarDispensacioOTC(null)" class="w-full bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold py-3 rounded-2xl">No gracias, continuar</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-bloqueig" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50">
+        <div class="bg-white rounded-3xl max-w-lg w-full p-8 text-center shadow-2xl border-4 border-red-500">
+            <div class="text-6xl mb-3">⛔</div>
+            <h3 class="text-2xl font-black text-red-600">Venta Bloqueada por Seguridad</h3>
+            <div id="llista-alertes" class="mt-4 bg-red-50 border border-red-200 text-red-800 p-4 rounded-2xl text-left text-sm font-semibold space-y-2"></div>
+            <button onclick="tancarModal('modal-bloqueig')" class="mt-6 w-full bg-red-600 text-white font-bold py-3.5 rounded-2xl">Entendido</button>
+        </div>
+    </div>
+
+    <div id="modal-exit" class="hidden fixed inset-0 bg-black/75 flex items-center justify-center p-4 z-50">
+        <div class="bg-white rounded-3xl max-w-lg w-full p-8 text-center shadow-2xl">
+            <div class="text-6xl mb-2">🤖</div>
+            <h3 class="text-2xl font-black text-teal-700">¡Medicamentos Dispensados!</h3>
+            <p class="text-slate-500 text-sm mb-4">Lotes seleccionados automáticamente por criterio FEFO:</p>
+            <div id="llista-moviments" class="space-y-2 text-left text-sm bg-slate-50 p-4 rounded-2xl border"></div>
+            <button onclick="reiniciarSessio()" class="mt-6 w-full bg-teal-600 text-white font-black py-3.5 rounded-2xl">Finalizar</button>
+        </div>
+    </div>
+
+    <script>
+        let catalegOTC = [];
+        let cistella = [];
+        let categoriaSel = "Todas";
+        let usuariActiu = null;
+        let modeEdicio = false;
+        let seleccionats = { alergies: [], patologies: [], medicacio: [] };
+        let timerCerca = null;
+
+        function anarA(vista) {
+            ['inici', 'login', 'registre', 'otc', 'qr'].forEach(v => {
+                document.getElementById('vista-' + v).classList.add('hidden');
+            });
+            document.getElementById('vista-' + vista).classList.remove('hidden');
+        }
+
+        function tancarModal(id) { document.getElementById(id).classList.add('hidden'); }
+
+        async function iniciarSessioCredencials() {
+            const dni = document.getElementById('login-dni').value.trim();
+            const password = document.getElementById('login-pass').value.trim();
+            if (!dni || !password) {
+                alert("Introduce tu DNI/NIE y contraseña.");
+                return;
+            }
+            const res = await fetch('/api/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ dni_nie: dni, password: password })
+            });
+            if (!res.ok) {
+                const err = await res.json();
+                alert(err.detail);
+                return;
+            }
+            const u = await res.json();
+            actualitzarCapcaleraUsuari(u);
+            anarA('inici');
+        }
+
+        function simularLecturaEmpremta() {
+            const estat = document.getElementById('estat-empremta');
+            estat.innerText = "🔄 Leyendo huella biométrica en el sensor...";
+            setTimeout(() => {
+                const ultimToken = localStorage.getItem('apotheka_last_fp') || 'FP-X1234567C';
+                loginEmpremtaDirecta(ultimToken);
+            }, 600);
+        }
+
+        async function loginEmpremtaDirecta(token) {
+            const estat = document.getElementById('estat-empremta');
+            estat.innerText = "🔍 Verificando huella...";
+            const res = await fetch('/api/login-empremta', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ empremta_token: token })
+            });
+            if (!res.ok) {
+                estat.innerText = "❌ Huella no reconocida.";
+                return;
+            }
+            const u = await res.json();
+            estat.innerText = `✅ ¡Bienvenido/a, ${u.nom_complet}!`;
+            setTimeout(() => {
+                estat.innerText = "";
+                actualitzarCapcaleraUsuari(u);
+                anarA('inici');
+            }, 500);
+        }
+
+        // --- MODO CREAR NUEVO USUARIO ---
+        function obrirPaginaRegistre() {
+            modeEdicio = false;
+            document.getElementById('form-perfil-badge').innerText = "Nuevo Perfil Clínico";
+            document.getElementById('form-perfil-titol').innerText = "Registro de Usuario APOTHEKA";
+            document.getElementById('btn-form-tornar').onclick = () => anarA('login');
+            document.getElementById('btn-guardar-perfil').innerText = "Finalizar Registro y Acceder →";
+
+            const inpDni = document.getElementById('reg-dni');
+            inpDni.value = "";
+            inpDni.disabled = false;
+
+            document.getElementById('reg-nom').value = "";
+            document.getElementById('reg-edat').value = 30;
+            document.getElementById('label-reg-pass').innerText = "Contraseña de acceso *";
+            document.getElementById('reg-pass').placeholder = "Crea una contraseña segura";
+            document.getElementById('reg-pass').value = "";
+            document.getElementById('reg-empremta').checked = true;
+
+            seleccionats = { alergies: [], patologies: [], medicacio: [] };
+            ['alergies', 'patologies', 'medicacio'].forEach(tipus => {
+                document.getElementById('search-' + tipus).value = "";
+                renderTags(tipus);
+            });
+            anarA('registre');
+        }
+
+        // --- MODO EDITAR PERFIL EXISTENTE ---
+        function obrirPaginaEdicioPerfil() {
+            if (!usuariActiu) return;
+            modeEdicio = true;
+            document.getElementById('form-perfil-badge').innerText = "Edición de Perfil Clínico";
+            document.getElementById('form-perfil-titol').innerText = `Modificar Perfil · ${usuariActiu.nom_complet}`;
+            document.getElementById('btn-form-tornar').onclick = () => anarA('inici');
+            document.getElementById('btn-guardar-perfil').innerText = "Guardar Cambios en mi Perfil ✓";
+
+            const inpDni = document.getElementById('reg-dni');
+            inpDni.value = usuariActiu.dni_nie;
+            inpDni.disabled = true;
+
+            document.getElementById('reg-nom').value = usuariActiu.nom_complet;
+            document.getElementById('reg-edat').value = usuariActiu.edat;
+            document.getElementById('label-reg-pass').innerText = "Nueva Contraseña (dejar en blanco para mantener)";
+            document.getElementById('reg-pass').placeholder = "••••••••";
+            document.getElementById('reg-pass').value = "";
+            document.getElementById('reg-empremta').checked = Boolean(usuariActiu.te_empremta);
+
+            const parseTags = (csv) => (csv || "").split(",").map(s => s.trim()).filter(Boolean).map(c => ({
+                clau: c,
+                nom: c.charAt(0).toUpperCase() + c.slice(1).replace(/_/g, " ")
+            }));
+
+            seleccionats = {
+                alergies: parseTags(usuariActiu.alergies),
+                patologies: parseTags(usuariActiu.patologies),
+                medicacio: parseTags(usuariActiu.medicacio_habitual)
+            };
+            ['alergies', 'patologies', 'medicacio'].forEach(tipus => {
+                document.getElementById('search-' + tipus).value = "";
+                renderTags(tipus);
+            });
+            anarA('registre');
+        }
+
+        function filtrarSuggeriments(tipus) {
+            clearTimeout(timerCerca);
+            const input = document.getElementById('search-' + tipus);
+            const dropdown = document.getElementById('dropdown-' + tipus);
+            const text = input.value.trim();
+
+            timerCerca = setTimeout(async () => {
+                try {
+                    const res = await fetch(`/api/cerca-clinica?tipus=${tipus}&q=${encodeURIComponent(text)}`);
+                    const dades = await res.json();
+
+                    const filtrats = dades.filter(item => !seleccionats[tipus].some(s => s.nom === item.nom));
+
+                    let html = filtrats.map(item => `
+                        <div onclick="afegirTagClinic('${tipus}', '${item.clau.replace(/'/g, "\\'")}', '${item.nom.replace(/'/g, "\\'")}')" 
+                             class="px-4 py-2.5 hover:bg-teal-50 cursor-pointer text-sm font-medium text-slate-700 border-b border-slate-100 flex justify-between items-center">
+                            <span>${item.nom}</span>
+                            <span class="text-[11px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded font-bold">${item.origen} · + Añadir</span>
+                        </div>
+                    `).join('');
+
+                    if (text.length >= 3 && !filtrats.some(f => f.nom.toLowerCase() === text.toLowerCase())) {
+                        const clauCustom = text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, "_");
+                        html += `
+                            <div onclick="afegirTagClinic('${tipus}', '${clauCustom}', '${text.replace(/'/g, "\\'")}')" 
+                                 class="px-4 py-2.5 bg-amber-50 hover:bg-amber-100 cursor-pointer text-sm font-bold text-amber-900 flex justify-between items-center">
+                                <span>Añadir "${text}" a mi historial</span>
+                                <span class="text-xs">+ Personalizado</span>
+                            </div>
+                        `;
+                    }
+
+                    if (!html) {
+                        dropdown.classList.add('hidden');
+                        return;
+                    }
+                    dropdown.innerHTML = html;
+                    dropdown.classList.remove('hidden');
+                } catch (err) {
+                    console.error("Error buscando datos clínicos:", err);
+                }
+            }, 150);
+        }
+
+        function afegirTagClinic(tipus, clau, nom) {
+            if (!seleccionats[tipus].some(i => i.clau === clau)) {
+                seleccionats[tipus].push({ clau, nom });
+            }
+            document.getElementById('search-' + tipus).value = "";
+            document.getElementById('dropdown-' + tipus).classList.add('hidden');
+            renderTags(tipus);
+        }
+
+        function eliminarTagClinic(tipus, clau) {
+            seleccionats[tipus] = seleccionats[tipus].filter(i => i.clau !== clau);
+            renderTags(tipus);
+        }
+
+        function renderTags(tipus) {
+            const cont = document.getElementById('tags-' + tipus);
+            cont.innerHTML = seleccionats[tipus].map(item => `
+                <span class="bg-teal-100 text-teal-900 text-xs font-bold px-3 py-1.5 rounded-full flex items-center gap-2">
+                    ${item.nom}
+                    <button onclick="eliminarTagClinic('${tipus}', '${item.clau}')" class="text-teal-700 hover:text-red-600 font-black">✕</button>
+                </span>
+            `).join('');
+        }
+
+        document.addEventListener('click', (e) => {
+            ['alergies', 'patologies', 'medicacio'].forEach(tipus => {
+                const inp = document.getElementById('search-' + tipus);
+                const drop = document.getElementById('dropdown-' + tipus);
+                if (inp && drop && !inp.contains(e.target) && !drop.contains(e.target)) {
+                    drop.classList.add('hidden');
+                }
+            });
+        });
+
+        async function guardarFormulariPerfil() {
+            const dni = document.getElementById('reg-dni').value.trim();
+            const nom = document.getElementById('reg-nom').value.trim();
+            const edat = parseInt(document.getElementById('reg-edat').value || 30);
+            const password = document.getElementById('reg-pass').value.trim();
+            const empremta = document.getElementById('reg-empremta').checked;
+
+            if (!modeEdicio) {
+                if (!dni || !nom || !password) {
+                    alert("Completa DNI/NIE, nombre completo y contraseña.");
+                    return;
+                }
+                const res = await fetch('/api/usuaris', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        dni_nie: dni,
+                        nom_complet: nom,
+                        edat: edat,
+                        password: password,
+                        registrar_empremta: empremta,
+                        alergies: seleccionats.alergies.map(i => i.clau),
+                        patologies: seleccionats.patologies.map(i => i.clau),
+                        medicacio_habitual: seleccionats.medicacio.map(i => i.clau)
+                    })
+                });
+                if (!res.ok) {
+                    const err = await res.json();
+                    alert(err.detail);
+                    return;
+                }
+                const u = await res.json();
+                if (u.empremta_token) localStorage.setItem('apotheka_last_fp', u.empremta_token);
+                actualitzarCapcaleraUsuari(u);
+                anarA('inici');
+            } else {
+                if (!nom) {
+                    alert("El nombre completo es obligatorio.");
+                    return;
+                }
+                const res = await fetch(`/api/usuaris/${encodeURIComponent(dni)}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        nom_complet: nom,
+                        edat: edat,
+                        password: password || null,
+                        registrar_empremta: empremta,
+                        alergies: seleccionats.alergies.map(i => i.clau),
+                        patologies: seleccionats.patologies.map(i => i.clau),
+                        medicacio_habitual: seleccionats.medicacio.map(i => i.clau)
+                    })
+                });
+                if (!res.ok) {
+                    const err = await res.json();
+                    alert(err.detail);
+                    return;
+                }
+                const u = await res.json();
+                if (u.empremta_token) localStorage.setItem('apotheka_last_fp', u.empremta_token);
+                actualitzarCapcaleraUsuari(u);
+                anarA('inici');
+            }
+        }
+
+        function actualitzarCapcaleraUsuari(u) {
+            usuariActiu = u;
+            document.getElementById('header-nom').innerText = `${u.nom_complet} (${u.dni_nie})`;
+            document.getElementById('header-info').innerText = `Alergias: ${u.alergies || 'ninguna'} · Patologías: ${u.patologies || 'ninguna'}`;
+            document.getElementById('btn-header-perfil').classList.remove('hidden');
+            document.getElementById('btn-header-auth').innerText = "Cambiar Usuario";
+            document.getElementById('btn-header-logout').classList.remove('hidden');
+            document.getElementById('subtitol-inici').classList.add('hidden');
+        }
+
+        function tancarSessio() {
+            usuariActiu = null;
+            document.getElementById('header-nom').innerText = "Usuario No Identificado";
+            document.getElementById('header-info').innerText = "Inicia sesión o regístrate por seguridad clínica";
+            document.getElementById('btn-header-perfil').classList.add('hidden');
+            document.getElementById('btn-header-auth').innerText = "Iniciar Sesión";
+            document.getElementById('btn-header-logout').classList.add('hidden');
+            document.getElementById('subtitol-inici').classList.remove('hidden');
+            anarA('inici');
+        }
+
+        async function obrirCatalegOTC() {
+            const res = await fetch('/api/medicaments/otc');
+            catalegOTC = await res.json();
+            pintarCategories();
+            pintarProductes();
+            anarA('otc');
+        }
+
+        function pintarCategories() {
+            const cats = ["Todas", ...new Set(catalegOTC.map(m => m.categoria))];
+            document.getElementById('filtres-categoria').innerHTML = cats.map(c => `
+                <button onclick="filtrarCat('${c}')" class="px-4 py-2 rounded-xl font-bold text-xs whitespace-nowrap ${categoriaSel === c ? 'bg-teal-600 text-white' : 'bg-white text-slate-700 border'}">
+                    ${c}
+                </button>
+            `).join('');
+        }
+
+        function filtrarCat(cat) { categoriaSel = cat; pintarCategories(); pintarProductes(); }
+
+        function pintarProductes() {
+            const q = document.getElementById('cerca-otc').value.toLowerCase();
+            const llista = catalegOTC.filter(m => {
+                const okCat = categoriaSel === "Todas" || m.categoria === categoriaSel;
+                const okText = m.nom_oficial.toLowerCase().includes(q) || m.principi_actiu.toLowerCase().includes(q);
+                return okCat && okText;
+            });
+
+            document.getElementById('graella-otc').innerHTML = llista.map(m => `
+                <div class="bg-white p-5 rounded-3xl shadow border border-slate-100 flex flex-col justify-between">
+                    <div>
+                        <div class="flex justify-between items-center mb-3">
+                            <span class="text-xs font-bold bg-teal-50 text-teal-700 px-2.5 py-1 rounded-lg">${m.categoria}</span>
+                            <span class="text-xs font-mono text-slate-400">CN: ${m.cn}</span>
+                        </div>
+                        ${m.url_foto 
+                            ? `<img src="${m.url_foto}" alt="${m.nom_oficial}" class="h-28 w-full object-contain mb-3 rounded-xl bg-slate-50 p-2">`
+                            : `<div class="h-28 flex items-center justify-center text-5xl bg-slate-50 rounded-xl mb-3">💊</div>`
+                        }
+                        <h4 class="font-extrabold text-sm text-slate-800 line-clamp-2">${m.nom_oficial}</h4>
+                        <p class="text-xs text-slate-500 mt-1">${m.principi_actiu}</p>
+
+                        ${m.similars && m.similars.length > 0 ? `
+                            <div class="mt-3 pt-2 border-t border-dashed border-slate-200">
+                                <span class="text-[11px] font-bold text-slate-400 uppercase block mb-1">Alternativas similares:</span>
+                                <div class="flex flex-wrap gap-1">
+                                    ${m.similars.map(s => `
+                                        <button onclick="afegirCistella('${s.cn}')" class="text-[11px] bg-slate-100 hover:bg-teal-50 text-slate-700 px-2 py-1 rounded-lg truncate max-w-full">
+                                            + ${s.nom_oficial.split(' ')[0]} (${s.preu.toFixed(2)}€)
+                                        </button>
+                                    `).join('')}
+                                </div>
+                            </div>
+                        ` : ''}
+                    </div>
+                    <div class="mt-4 pt-3 border-t flex justify-between items-center">
+                        <span class="text-xl font-black text-slate-900">${m.preu.toFixed(2)} €</span>
+                        <button onclick="afegirCistella('${m.cn}')" class="bg-teal-600 hover:bg-teal-700 text-white font-bold px-4 py-2 rounded-xl text-sm">+ Añadir</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function afegirCistella(cn) {
+            const med = catalegOTC.find(m => m.cn === cn);
+            if (!med) return;
+            const item = cistella.find(i => i.cn === cn);
+            if (item) {
+                if (item.quantitat >= med.limit_unitats_venda) {
+                    mostrarBloqueig([`Límite máximo de ${med.limit_unitats_venda} unidades para ${med.nom_oficial}.`]);
+                    return;
+                }
+                item.quantitat++;
+            } else {
+                cistella.push({ ...med, quantitat: 1 });
+            }
+            actualitzarCistella();
+        }
+
+        function buidarCistella() { cistella = []; actualitzarCistella(); }
+
+        function actualitzarCistella() {
+            const cont = document.getElementById('llista-cistella');
+            const btn = document.getElementById('btn-confirmar-otc');
+            if (cistella.length === 0) {
+                cont.innerHTML = `<p class="text-center text-slate-400 text-sm mt-10">La cesta está vacía</p>`;
+                document.getElementById('total-cistella').innerText = "0,00 €";
+                btn.disabled = true;
+                return;
+            }
+            let total = 0;
+            cont.innerHTML = cistella.map(i => {
+                total += i.preu * i.quantitat;
+                return `
+                    <div class="bg-slate-50 p-3 rounded-xl border flex justify-between items-center">
+                        <div class="pr-2">
+                            <div class="font-bold text-xs text-slate-800 line-clamp-1">${i.nom_oficial}</div>
+                            <div class="text-xs text-slate-500">${i.quantitat} x ${i.preu.toFixed(2)} €</div>
+                        </div>
+                        <span class="font-black text-sm">${(i.preu * i.quantitat).toFixed(2)} €</span>
+                    </div>
+                `;
+            }).join('');
+            document.getElementById('total-cistella').innerText = total.toFixed(2).replace('.', ',') + " €";
+            btn.disabled = false;
+        }
+
+        function comprovarVendaCreuada() {
+            let rec = null;
+            for (const item of cistella) {
+                if (item.recomanacio_creuada && !cistella.some(c => c.cn === item.recomanacio_creuada.cn)) {
+                    rec = item.recomanacio_creuada;
+                    break;
+                }
+            }
+            if (rec) {
+                document.getElementById('cs-nom').innerText = rec.nom_oficial;
+                document.getElementById('cs-preu').innerText = `+ ${rec.preu.toFixed(2)} €`;
+                if (rec.url_foto) {
+                    document.getElementById('cs-img').src = rec.url_foto;
+                    document.getElementById('cs-img').classList.remove('hidden');
+                    document.getElementById('cs-fallback-icon').classList.add('hidden');
+                } else {
+                    document.getElementById('cs-img').classList.add('hidden');
+                    document.getElementById('cs-fallback-icon').classList.remove('hidden');
+                }
+                document.getElementById('btn-afegir-cs').onclick = () => enviarDispensacioOTC(rec.cn);
+                document.getElementById('modal-cross-sell').classList.remove('hidden');
+            } else {
+                enviarDispensacioOTC(null);
+            }
+        }
+
+        async function enviarDispensacioOTC(cnExtra) {
+            tancarModal('modal-cross-sell');
+            const items = cistella.map(i => ({ cn: i.cn, quantitat: i.quantitat }));
+            if (cnExtra) items.push({ cn: cnExtra, quantitat: 1 });
+
+            const res = await fetch('/api/dispensar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    dni_nie: usuariActiu ? usuariActiu.dni_nie : null,
+                    items: items,
+                    tipus_venda: "Sin Receta (OTC)"
+                })
+            });
+            const data = await res.json();
+            if (!data.ok) { mostrarBloqueig(data.alertes); }
+            else { buidarCistella(); mostrarExit(data.moviments); }
+        }
+
+        function testQR(codi) { document.getElementById('input-codi-qr').value = codi; consultarQR(); }
+
+        async function consultarQR() {
+            const codi = document.getElementById('input-codi-qr').value.trim();
+            if (!codi) return;
+            const box = document.getElementById('detall-qr');
+            box.classList.remove('hidden');
+
+            const res = await fetch(`/api/recepta/${codi}`);
+            if (!res.ok) {
+                const err = await res.json();
+                box.innerHTML = `<p class="text-red-600 font-bold">❌ ${err.detail}</p>`;
+                return;
+            }
+            const data = await res.json();
+            actualitzarCapcaleraUsuari(data.usuari);
+
+            box.innerHTML = `
+                <div class="text-xs font-bold text-indigo-600 uppercase mb-1">Receta Electrónica: ${data.codi_qr}</div>
+                <h4 class="font-black text-lg text-slate-800">${data.medicament.nom_oficial}</h4>
+                <p class="text-sm text-slate-600 mt-1">Titular: <b>${data.usuari.nom_complet}</b> (DNI/NIE: ${data.usuari.dni_nie})</p>
+                <p class="text-xs text-slate-500 mt-1">Historial: Alergias [${data.usuari.alergies || 'ninguna'}] · Patologías [${data.usuari.patologies || 'ninguna'}]</p>
+                <button onclick="dispensarQR('${data.codi_qr}', '${data.usuari.dni_nie}', '${data.medicament.cn}', ${data.quantitat_prescrita})"
+                        class="mt-4 w-full bg-indigo-600 hover:bg-indigo-700 text-white font-black py-3.5 rounded-xl">
+                    Validar Compatibilidad y Dispensar
+                </button>
+            `;
+        }
+
+        async function dispensarQR(codiQr, dni, cn, quantitat) {
+            const res = await fetch('/api/dispensar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    dni_nie: dni,
+                    items: [{ cn: cn, quantitat: quantitat }],
+                    tipus_venda: "Con Receta (QR)",
+                    codi_qr: codiQr
+                })
+            });
+            const data = await res.json();
+            if (!data.ok) { mostrarBloqueig(data.alertes); }
+            else { document.getElementById('detall-qr').classList.add('hidden'); mostrarExit(data.moviments); }
+        }
+
+        function mostrarBloqueig(alertes) {
+            document.getElementById('llista-alertes').innerHTML = alertes.map(a => `<div>🚨 ${a}</div>`).join('');
+            document.getElementById('modal-bloqueig').classList.remove('hidden');
+        }
+
+        function mostrarExit(moviments) {
+            document.getElementById('llista-moviments').innerHTML = moviments.map(m => `
+                <div class="bg-white p-3 rounded-xl border flex justify-between items-center">
+                    <div>
+                        <div class="font-bold text-slate-800">${m.nom_medicament} (${m.quantitat} u.)</div>
+                        <div class="text-xs text-slate-500">Canal ${m.canal_robot} · Lote: <b>${m.codi_lot}</b></div>
+                    </div>
+                    <span class="bg-teal-100 text-teal-800 text-xs font-bold px-2 py-1 rounded">Cad: ${m.data_caducitat}</span>
+                </div>
+            `).join('');
+            document.getElementById('modal-exit').classList.remove('hidden');
+        }
+
+        function reiniciarSessio() {
+            tancarModal('modal-exit');
+            tancarSessio();
+        }
+    </script>
+</body>
+</html>
