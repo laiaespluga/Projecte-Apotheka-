@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="ca">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Prototip Recepta Electrònica QR</title>
+    <!-- Llibreria QRious (molt més fiable per generar QR i descarregar-los) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
+    <!-- Llibreria jsQR (llegeix imatges QR sense bloquejos de seguretat) -->
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+    <style>
+        * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { background-color: #eef2f5; margin: 0; padding: 30px; display: flex; flex-direction: column; align-items: center; }
+        h1 { color: #1e293b; margin-bottom: 20px; text-align: center; }
+        
+        /* Pestanyes de navegació */
+        .tabs { display: flex; gap: 10px; margin-bottom: 25px; }
+        .tab-btn { padding: 12px 24px; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; background: #cbd5e1; color: #334155; transition: 0.2s; }
+        .tab-btn:hover { background: #94a3b8; color: white; }
+        .tab-btn.active { background: #0284c7; color: white; }
+
+        /* Contenidors principals */
+        .panel { display: none; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.08); width: 100%; max-width: 500px; }
+        .panel.active { display: block; }
+
+        /* Formularis i botons */
+        .form-group { margin-bottom: 15px; }
+        label { display: block; font-size: 14px; font-weight: bold; color: #475569; margin-bottom: 5px; }
+        input[type="text"] { width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 16px; }
+        
+        .btn-primary { width: 100%; padding: 12px; background: #0284c7; color: white; border: none; border-radius: 6px; font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 10px; }
+        .btn-primary:hover { background: #0369a1; }
+        
+        .btn-secondary { width: 100%; padding: 12px; background: #10b981; color: white; border: none; border-radius: 6px; font-size: 15px; font-weight: bold; cursor: pointer; margin-top: 15px; }
+        .btn-secondary:hover { background: #059669; }
+
+        /* Zona QR generat */
+        #qr-resultat { margin-top: 25px; flex-direction: column; align-items: center; padding-top: 20px; border-top: 1px solid #e2e8f0; display: none; }
+        canvas#qr-canvas { padding: 10px; background: white; border: 1px solid #cbd5e1; border-radius: 8px; }
+
+        /* Zona pujar fitxer */
+        .upload-box { border: 2px dashed #0284c7; border-radius: 10px; padding: 25px; text-align: center; background: #f0f9ff; cursor: pointer; margin-top: 15px; transition: 0.2s; }
+        .upload-box:hover { background: #e0f2fe; }
+        input[type="file"] { display: none; }
+
+        /* Targeta de recepta llegida */
+        .recepta-card { display: none; margin-top: 25px; border: 2px solid #0284c7; border-radius: 10px; padding: 20px; background: #f8fafc; animation: fadeIn 0.3s ease-in; }
+        .recepta-header { border-bottom: 2px solid #0284c7; padding-bottom: 10px; margin-bottom: 15px; color: #0284c7; font-weight: bold; font-size: 18px; display: flex; justify-content: space-between; }
+        .dada { margin-bottom: 12px; }
+        .etiqueta { font-size: 11px; color: #64748b; text-transform: uppercase; font-weight: bold; }
+        .valor { font-size: 17px; color: #0f172a; font-weight: 600; }
+
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
+<body>
+
+    <h1>Sistema de Recepta Electrònica</h1>
+
+    <!-- Botons per canviar de rol -->
+    <div class="tabs">
+        <button type="button" id="btn-tab-metge" class="tab-btn active" onclick="canviarVista('metge')">1. Consulta Mèdica (Crear QR)</button>
+        <button type="button" id="btn-tab-farmacia" class="tab-btn" onclick="canviarVista('farmacia')">2. Farmàcia (Llegir QR)</button>
+    </div>
+
+    <!-- VISTA 1: GENERADOR DE RECEPTA I QR -->
+    <div id="vista-metge" class="panel active">
+        <h2 style="margin-top:0; color:#0f172a;">Nova Prescripció</h2>
+        <div class="form-group">
+            <label>Nom i cognoms del pacient</label>
+            <input type="text" id="input-nom" value="Maria Puig i Soler">
+        </div>
+        <div class="form-group">
+            <label>Medicament receptat</label>
+            <input type="text" id="input-med" value="Ibuprofèn 600 mg (20 comprimits)">
+        </div>
+        <div class="form-group">
+            <label>Pauta / Indicacions</label>
+            <input type="text" id="input-pauta" value="1 comprimit cada 8 hores després dels àpats">
+        </div>
+        <button type="button" class="btn-primary" onclick="generarQR()">Generar Codi QR de la Recepta</button>
+
+        <div id="qr-resultat">
+            <canvas id="qr-canvas"></canvas>
+            <button type="button" class="btn-secondary" onclick="descarregarQR()">Descarregar Imatge QR (PNG)</button>
+        </div>
+    </div>
+
+    <!-- VISTA 2: ESCÀNER DE FARMÀCIA -->
+    <div id="vista-farmacia" class="panel">
+        <h2 style="margin-top:0; color:#0f172a;">Lectura de Recepta</h2>
+        <p style="font-size: 14px; color: #475569; margin-bottom: 15px;">Selecciona la imatge del codi QR per validar la recepta del pacient:</p>
+        
+        <label for="file-input" class="upload-box">
+            <div style="font-size: 32px; margin-bottom: 8px;">📷</div>
+            <strong style="color: #0284c7; font-size: 16px;">Fes clic aquí per seleccionar la imatge QR</strong>
+            <div style="font-size: 13px; color: #64748b; margin-top: 4px;">(Formats acceptats: PNG, JPG)</div>
+        </label>
+        <input type="file" id="file-input" accept="image/*" onchange="llegirImatgeQR(event)">
+
+        <!-- Canvas ocult per processar la imatge -->
+        <canvas id="hidden-canvas" style="display:none;"></canvas>
+
+        <!-- Resultat de la lectura -->
+        <div id="fitxa-recepta" class="recepta-card">
+            <div class="recepta-header">
+                <span>RECEPTA VALIDADA</span>
+                <span>✓</span>
+            </div>
+            <div class="dada">
+                <div class="etiqueta">Pacient</div>
+                <div class="valor" id="res-nom">-</div>
+            </div>
+            <div class="dada">
+                <div class="etiqueta">Medicament</div>
+                <div class="valor" id="res-med">-</div>
+            </div>
+            <div class="dada">
+                <div class="etiqueta">Pauta mèdica</div>
+                <div class="valor" id="res-pauta">-</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Funcions segures per codificar i descodificar text amb accents (UTF-8)
+        function codificarDades(obj) {
+            const jsonStr = JSON.stringify(obj);
+            return btoa(encodeURIComponent(jsonStr).replace(/%([0-9A-F]{2})/g,
+                function(match, p1) {
+                    return String.fromCharCode('0x' + p1);
+                }));
+        }
+
+        function descodificarDades(str) {
+            const jsonStr = decodeURIComponent(atob(str).split('').map(function(c) {
+                return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+            }).join(''));
+            return JSON.parse(jsonStr);
+        }
+
+        // 1. Canviar entre pestanyes
+        function canviarVista(vista) {
+            document.getElementById('vista-metge').classList.remove('active');
+            document.getElementById('vista-farmacia').classList.remove('active');
+            document.getElementById('btn-tab-metge').classList.remove('active');
+            document.getElementById('btn-tab-farmacia').classList.remove('active');
+
+            if (vista === 'metge') {
+                document.getElementById('vista-metge').classList.add('active');
+                document.getElementById('btn-tab-metge').classList.add('active');
+            } else {
+                document.getElementById('vista-farmacia').classList.add('active');
+                document.getElementById('btn-tab-farmacia').classList.add('active');
+            }
+        }
+
+        // 2. Generar el codi QR
+        function generarQR() {
+            const nom = document.getElementById('input-nom').value.trim();
+            const med = document.getElementById('input-med').value.trim();
+            const pauta = document.getElementById('input-pauta').value.trim();
+
+            if (!nom || !med) {
+                alert("Si us plau, omple el nom i el medicament.");
+                return;
+            }
+
+            if (typeof QRious === 'undefined') {
+                alert("Error: No s'ha pogut carregar la llibreria QR. Comprova la connexió a internet.");
+                return;
+            }
+
+            // Codifiquem les dades de manera segura sense problemes d'accents
+            const dadesCodificades = codificarDades({ nom, med, pauta });
+
+            new QRious({
+                element: document.getElementById('qr-canvas'),
+                value: dadesCodificades,
+                size: 250,
+                padding: 20, // Marge blanc perquè es llegeixi sempre bé
+                level: 'M'
+            });
+
+            document.getElementById('qr-resultat').style.display = 'flex';
+        }
+
+        // 3. Descarregar el QR com a imatge PNG
+        function descarregarQR() {
+            const canvas = document.getElementById('qr-canvas');
+            const link = document.createElement('a');
+            link.download = 'recepta_qr.png';
+            link.href = canvas.toDataURL("image/png");
+            link.click();
+        }
+
+        // 4. Llegir la imatge del QR pujada
+        function llegirImatgeQR(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            if (typeof jsQR === 'undefined') {
+                alert("Error: No s'ha pogut carregar el lector QR. Comprova la connexió a internet.");
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const img = new Image();
+                img.onload = function() {
+                    const canvas = document.getElementById('hidden-canvas');
+                    const ctx = canvas.getContext('2d');
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    ctx.drawImage(img, 0, 0, img.width, img.height);
+
+                    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                    const codi = jsQR(imageData.data, imageData.width, imageData.height);
+
+                    if (codi) {
+                        try {
+                            const dades = descodificarDades(codi.data);
+                            document.getElementById('res-nom').innerText = dades.nom || "No especificat";
+                            document.getElementById('res-med').innerText = dades.med || "No especificat";
+                            document.getElementById('res-pauta').innerText = dades.pauta || "Sense pauta";
+                            
+                            document.getElementById('fitxa-recepta').style.display = 'block';
+                        } catch (err) {
+                            alert("El codi QR llegit no té el format d'una recepta vàlida.");
+                        }
+                    } else {
+                        alert("No s'ha detectat cap codi QR en aquesta imatge.");
+                    }
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+            event.target.value = ''; 
+        }
+    </script>
+</body>
+</html>
