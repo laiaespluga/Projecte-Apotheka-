@@ -2,7 +2,7 @@ import os
 from datetime import datetime
 from sqlalchemy import (
     create_engine, Column, String, Integer, Float, Boolean,
-    DateTime, ForeignKey, Text
+    DateTime, ForeignKey, Text, text 
 )
 from sqlalchemy.orm import declarative_base, sessionmaker
 
@@ -104,7 +104,20 @@ class ComandaCua(Base):
     requereix_validacio = Column(Boolean, default=False)
     validada_farmaceutic = Column(Boolean, default=False)
     estat = Column(String(40), default="Pendent")  # "Pendent validació" | "Llest per dispensar" | "Dispensada" | "Rebutjada"
+    motiu_rebuig = Column(Text, nullable=True)
+    moviments_json = Column(Text, nullable=True)
 
 
 def init_db():
     Base.metadata.create_all(bind=engine)
+    # Migració segura per a bases de dades SQLite ja existents
+    with engine.connect() as conn:
+        for col_sql in [
+            "ALTER TABLE comandes_cua ADD COLUMN motiu_rebuig TEXT",
+            "ALTER TABLE comandes_cua ADD COLUMN moviments_json TEXT",
+        ]:
+            try:
+                conn.execute(text(col_sql))
+                conn.commit()
+            except Exception:
+                pass

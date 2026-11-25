@@ -22,6 +22,10 @@ from sync_cima import (
 app = FastAPI(title="APOTHEKA Client Kiosk & Pharmacy API")
 init_db()
 
+MODE_GUARDIA_ACTIU = True
+VENDES_SENSE_ESTOC = 0
+ROBOT_BLOQUEJAT = False
+
 
 def get_db():
     db = SessionLocal()
@@ -74,6 +78,18 @@ class ComandaRequest(BaseModel):
 class ReabastirLotRequest(BaseModel):
     quantitat_afegida: int = 20
     dies_caducitat: int = 365
+
+
+class ModeGuardiaRequest(BaseModel):
+    actiu: bool
+
+
+class RebutjarComandaRequest(BaseModel):
+    motiu: Optional[str] = "Denegada pel farmacèutic en revisió clínica."
+
+
+class RobotEstatRequest(BaseModel):
+    bloquejat: bool
 
 
 @app.on_event("startup")
@@ -394,8 +410,67 @@ def validar_qr(codi_qr: str, db: Session = Depends(get_db)):
     }
 
 
+def executar_extraccio_fefo(db: Session, items_list: list, dni_nie: str, tipus_venda: str, codi_qr: Optional[str] = None):
+    moviments = []
+    # 1. Comprovació estricta d'estoc abans de descomptar res
+    for item in items_list:
+        cn = item["cn"]
+        qty = item["quantitat"]
+        med = db.query(Medicament).filter(Medicament.cn == cn).first()
+        if not med:
+            return None, [f"Medicamento {cn} no encontrado."]
+        lots = db.query(LotInventari).filter(
+            LotInventari.cn == cn, LotInventari.quantitat > 0
+        ).order_by(LotInventari.data_caducitat.asc()).all()
+        if sum(l.quantitat for l in lots) < qty:
+            return None, [f"Sin stock suficiente en el robot para '{med.nom_oficial}'."]
+
+    # 2. Descompte FEFO i registre
+    for item in items_list:
+        cn = item["cn"]
+        qty = item["quantitat"]
+        med = db.query(Medicament).filter(Medicament.cn == cn).first()
+        lots = db.query(LotInventari).filter(
+            LotInventari.cn == cn, LotInventari.quantitat > 0
+        ).order_by(LotInventari.data_caducitat.asc()).all()
+
+        pendent = qty
+        for lot in lots:
+            if pendent <= 0:
+                break
+            agafar = min(lot.quantitat, pendent)
+            lot.quantitat -= agafar
+
+            db.add(RegistreDispensacio(
+                dni_nie=dni_nie or "ANÓNIMO",
+                cn=med.cn,
+                nom_medicament=med.nom_oficial,
+                codi_lot=lot.codi_lot,
+                data_caducitat=lot.data_caducitat,
+                quantitat=agafar,
+                tipus_venda=tipus_venda
+            ))
+
+            moviments.append({
+                "nom_medicament": med.nom_oficial,
+                "codi_lot": lot.codi_lot,
+                "data_caducitat": lot.data_caducitat,
+                "quantitat": agafar,
+                "canal_robot": lot.canal_robot
+            })
+            pendent -= agafar
+
+    if codi_qr:
+        rec = db.query(ReceptaQR).filter(ReceptaQR.codi_qr == codi_qr.strip().upper()).first()
+        if rec:
+            rec.dispensada = True
+
+    return moviments, []
+
+
 @app.post("/api/dispensar")
 def processar_dispensacio(comanda: ComandaRequest, db: Session = Depends(get_db)):
+    global VENDES_SENSE_ESTOC
     usuari = None
     if comanda.dni_nie:
         usuari = db.query(Usuari).filter(Usuari.dni_nie == comanda.dni_nie.strip().upper()).first()
@@ -403,7 +478,15 @@ def processar_dispensacio(comanda: ComandaRequest, db: Session = Depends(get_db)
     alertes = []
     detall_items = []
     import_total = 0.0
-    requereix_validacio = bool(comanda.codi_qr)
+    falta_estoc = False
+
+    if ROBOT_BLOQUEJAT:
+        return {
+            "ok": False,
+            "alertes": [
+                "ROBOT BLOQUEADO: El módulo dispensador presenta una incidencia técnica. No se puede realizar la venta hasta que la farmacia reinicie el robot."
+            ]
+        }
 
     for item in comanda.items:
         med = db.query(Medicament).filter(Medicament.cn == item.cn).first()
@@ -411,11 +494,20 @@ def processar_dispensacio(comanda: ComandaRequest, db: Session = Depends(get_db)
             alertes.append(f"Medicamento {item.cn} no encontrado.")
             continue
 
-        if med.requereix_recepta:
-            requereix_validacio = True
-
         import_total += med.preu * item.quantitat
         detall_items.append({"cn": med.cn, "quantitat": item.quantitat, "nom": med.nom_oficial})
+
+        lots = db.query(LotInventari).filter(
+            LotInventari.cn == item.cn, LotInventari.quantitat > 0
+        ).order_by(LotInventari.data_caducitat.asc()).all()
+        estoc_disponible = sum(l.quantitat for l in lots)
+
+        if estoc_disponible <= 0 or estoc_disponible < item.quantitat:
+            falta_estoc = True
+            alertes.append(
+                f"SIN STOCK: No se puede realizar la venta de '{med.nom_oficial}' (stock disponible: {estoc_disponible} u.)."
+            )
+            continue
 
         if item.quantitat > med.limit_unitats_venda:
             alertes.append(
@@ -431,72 +523,83 @@ def processar_dispensacio(comanda: ComandaRequest, db: Session = Depends(get_db)
                         f"BLOQUEO CLÍNICO: '{med.nom_oficial}' ({med.principi_actiu}) es incompatible con '{contra.upper()}' registrado en el historial de {usuari.nom_complet} ({usuari.dni_nie})."
                     )
 
-        lots = db.query(LotInventari).filter(
-            LotInventari.cn == item.cn, LotInventari.quantitat > 0
-        ).order_by(LotInventari.data_caducitat.asc()).all()
-        if sum(l.quantitat for l in lots) < item.quantitat:
-            alertes.append(f"Stock insuficiente en el robot para '{med.nom_oficial}'.")
-
     if alertes:
+        if falta_estoc:
+            VENDES_SENSE_ESTOC += 1
         return {"ok": False, "alertes": alertes}
 
-    moviments = []
-    for item in comanda.items:
-        med = db.query(Medicament).filter(Medicament.cn == item.cn).first()
-        lots = db.query(LotInventari).filter(
-            LotInventari.cn == item.cn, LotInventari.quantitat > 0
-        ).order_by(LotInventari.data_caducitat.asc()).all()
-
-        pendent = item.quantitat
-        for lot in lots:
-            if pendent <= 0:
-                break
-            agafar = min(lot.quantitat, pendent)
-            lot.quantitat -= agafar
-
-            db.add(RegistreDispensacio(
-                dni_nie=usuari.dni_nie if usuari else "ANÓNIMO",
-                cn=med.cn,
-                nom_medicament=med.nom_oficial,
-                codi_lot=lot.codi_lot,
-                data_caducitat=lot.data_caducitat,
-                quantitat=agafar,
-                tipus_venda=comanda.tipus_venda
-            ))
-
-            moviments.append({
-                "nom_medicament": med.nom_oficial,
-                "codi_lot": lot.codi_lot,
-                "data_caducitat": lot.data_caducitat,
-                "quantitat": agafar,
-                "canal_robot": lot.canal_robot
-            })
-            pendent -= agafar
-
-    if comanda.codi_qr:
-        rec = db.query(ReceptaQR).filter(ReceptaQR.codi_qr == comanda.codi_qr.strip().upper()).first()
-        if rec:
-            rec.dispensada = True
-
     origen_cua = "Recepta QR Exterior" if comanda.codi_qr else "Taulell / 24-7"
-    estat_inicial = "Pendent validació" if requereix_validacio else "Llest per dispensar"
+    dni_final = usuari.dni_nie if usuari else "ANÓNIMO"
+
+    # MODE GUÀRDIA ACTIU: el farmacèutic ha d'acceptar manualment abans de dispensar
+    if MODE_GUARDIA_ACTIU:
+        nova_cua = ComandaCua(
+            origen=origen_cua,
+            dni_nie=dni_final,
+            codi_qr=comanda.codi_qr.strip().upper() if comanda.codi_qr else None,
+            items_json=json.dumps(detall_items, ensure_ascii=False),
+            import_total=round(import_total, 2),
+            te_venda_creuada=comanda.te_venda_creuada,
+            requereix_validacio=True,
+            validada_farmaceutic=False,
+            estat="Pendent validació"
+        )
+        db.add(nova_cua)
+        db.commit()
+        db.refresh(nova_cua)
+        return {
+            "ok": True,
+            "pendent_guardia": True,
+            "comanda_cua_id": nova_cua.id,
+            "moviments": []
+        }
+
+    # MODE AUTOMÀTIC (NIT / FARMÀCIA TANCADA): es dispensa directament
+    moviments, err_estoc = executar_extraccio_fefo(
+        db, detall_items, dni_final, comanda.tipus_venda, comanda.codi_qr
+    )
+    if err_estoc:
+        return {"ok": False, "alertes": err_estoc}
 
     nova_cua = ComandaCua(
         origen=origen_cua,
-        dni_nie=usuari.dni_nie if usuari else "ANÓNIMO",
+        dni_nie=dni_final,
         codi_qr=comanda.codi_qr.strip().upper() if comanda.codi_qr else None,
         items_json=json.dumps(detall_items, ensure_ascii=False),
         import_total=round(import_total, 2),
         te_venda_creuada=comanda.te_venda_creuada,
-        requereix_validacio=requereix_validacio,
-        validada_farmaceutic=not requereix_validacio,
-        estat=estat_inicial
+        requereix_validacio=False,
+        validada_farmaceutic=True,
+        estat="Dispensada",
+        moviments_json=json.dumps(moviments, ensure_ascii=False)
     )
     db.add(nova_cua)
-
     db.commit()
-    return {"ok": True, "moviments": moviments, "comanda_cua_id": nova_cua.id}
+    return {
+        "ok": True,
+        "pendent_guardia": False,
+        "comanda_cua_id": nova_cua.id,
+        "moviments": moviments
+    }
 
+
+@app.get("/api/comanda/{comanda_id}/estat")
+def consultar_estat_comanda(comanda_id: int, db: Session = Depends(get_db)):
+    c = db.query(ComandaCua).filter(ComandaCua.id == comanda_id).first()
+    if not c:
+        raise HTTPException(status_code=404, detail="Comanda no trobada.")
+    moviments = []
+    if c.moviments_json:
+        try:
+            moviments = json.loads(c.moviments_json)
+        except Exception:
+            moviments = []
+    return {
+        "id": c.id,
+        "estat": c.estat,
+        "motiu_rebuig": c.motiu_rebuig,
+        "moviments": moviments
+    }
 
 # --- ENDPOINTS PANELL INTERN DE FARMÀCIA ---
 
@@ -559,14 +662,24 @@ def obtenir_estat_farmacia(db: Session = Depends(get_db)):
     comandes_cross_sell = sum(1 for c in cua_rows if c.te_venda_creuada)
     facturacio_registrada = sum(c.import_total for c in cua_rows if c.estat == "Dispensada")
 
+    tots_meds = db.query(Medicament).all()
+    alertes_sense_estoc = []
+    for m in tots_meds:
+        estoc_m = sum(l["quantitat"] for l in lots_list if l["cn"] == m.cn)
+        if estoc_m <= 0:
+            alertes_sense_estoc.append({"cn": m.cn, "nom": m.nom_oficial})
+
     return {
+        "mode_guardia_actiu": MODE_GUARDIA_ACTIU,
         "cua": cua_list,
         "lots_fefo": lots_list,
+        "robot_bloquejat": ROBOT_BLOQUEJAT,
         "kpis": {
             "receptes_qr_tramitades": qr_tramitades,
             "vendes_24_7": vendes_24_7,
             "alertes_preventives_actives": alertes_actives,
             "comandes_venda_creuada": comandes_cross_sell,
+            "vendes_sense_estoc": VENDES_SENSE_ESTOC,
             "facturacio_registrada": round(facturacio_registrada, 2),
             "data_referencia": avui_str
         }
@@ -584,26 +697,60 @@ def validar_comanda_farmacia(comanda_id: int, db: Session = Depends(get_db)):
     return {"ok": True, "estat": c.estat}
 
 
+@app.post("/api/farmacia/mode-guardia")
+def canviar_mode_guardia(dades: ModeGuardiaRequest):
+    global MODE_GUARDIA_ACTIU
+    MODE_GUARDIA_ACTIU = dades.actiu
+    return {"ok": True, "mode_guardia_actiu": MODE_GUARDIA_ACTIU}
+
+
 @app.post("/api/farmacia/cua/{comanda_id}/dispensar")
 def dispensar_comanda_farmacia(comanda_id: int, db: Session = Depends(get_db)):
+    if ROBOT_BLOQUEJAT:
+        raise HTTPException(
+            status_code=400,
+            detail="El robot està bloquejat per una incidència. Prem 'Alliberar / Reiniciar' abans de dispensar."
+        )
+    
     c = db.query(ComandaCua).filter(ComandaCua.id == comanda_id).first()
     if not c:
         raise HTTPException(status_code=404, detail="Comanda no trobada.")
     if c.requereix_validacio and not c.validada_farmaceutic:
         raise HTTPException(status_code=400, detail="Cal validar la dispensació abans de lliurar en guàrdia.")
+    if c.estat == "Dispensada":
+        return {"ok": True, "estat": c.estat}
+
+    items_list = json.loads(c.items_json)
+    tipus_venda = "Con Receta (QR)" if c.codi_qr else "Sin Receta (OTC)"
+    moviments, err_estoc = executar_extraccio_fefo(
+        db, items_list, c.dni_nie or "ANÓNIMO", tipus_venda, c.codi_qr
+    )
+    if err_estoc:
+        raise HTTPException(status_code=400, detail=" ".join(err_estoc))
+
     c.estat = "Dispensada"
+    c.moviments_json = json.dumps(moviments, ensure_ascii=False)
     db.commit()
-    return {"ok": True, "estat": c.estat}
+    return {"ok": True, "estat": c.estat, "moviments": moviments}
 
 
 @app.post("/api/farmacia/cua/{comanda_id}/rebutjar")
-def rebutjar_comanda_farmacia(comanda_id: int, db: Session = Depends(get_db)):
+def rebutjar_comanda_farmacia(
+    comanda_id: int,
+    dades: Optional[RebutjarComandaRequest] = None,
+    db: Session = Depends(get_db)
+):
     c = db.query(ComandaCua).filter(ComandaCua.id == comanda_id).first()
     if not c:
         raise HTTPException(status_code=404, detail="Comanda no trobada.")
     c.estat = "Rebutjada"
+    c.motiu_rebuig = (
+        dades.motiu.strip()
+        if dades and dades.motiu and dades.motiu.strip()
+        else "Denegada pel farmacèutic en revisió clínica."
+    )
     db.commit()
-    return {"ok": True, "estat": c.estat}
+    return {"ok": True, "estat": c.estat, "motiu_rebuig": c.motiu_rebuig}
 
 
 @app.post("/api/farmacia/lots/{lot_id}/reabastir")
@@ -616,3 +763,14 @@ def reabastir_lot_fefo(lot_id: int, dades: ReabastirLotRequest, db: Session = De
     lot.data_caducitat = nova_cad.strftime("%Y-%m-%d")
     db.commit()
     return {"ok": True, "quantitat": lot.quantitat, "data_caducitat": lot.data_caducitat}
+
+@app.get("/api/robot/estat")
+def obtenir_estat_robot():
+    return {"robot_bloquejat": ROBOT_BLOQUEJAT}
+
+
+@app.post("/api/farmacia/robot-estat")
+def canviar_estat_robot(dades: RobotEstatRequest):
+    global ROBOT_BLOQUEJAT
+    ROBOT_BLOQUEJAT = dades.bloquejat
+    return {"ok": True, "robot_bloquejat": ROBOT_BLOQUEJAT}
