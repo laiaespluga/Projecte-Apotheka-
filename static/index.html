@@ -35,6 +35,11 @@
             </a>
         </div>
 
+        <!-- AVISO DE ROBOT BLOQUEADO -->
+        <div id="banner-robot-bloquejat" class="hidden bg-red-600 text-white px-6 py-3 text-center text-sm font-extrabold shadow-md z-20">
+            ⚠️ Servicio temporalmente interrumpido: el robot dispensador está en revisión técnica. Espera a que la farmacia lo reinicie.
+        </div>
+
         <!-- RECUADRO EXCLUSIVO DE ESTADO DE SESIÓN Y USUARIO -->
         <div class="flex items-center gap-2.5 bg-teal-800 px-4 py-2 rounded-2xl border border-teal-500">
             <div class="text-right mr-1">
@@ -358,6 +363,18 @@
                 <button onclick="continuarDespresAcceptacioAnonim()" class="bg-amber-600 hover:bg-amber-700 text-white font-black py-3 rounded-2xl text-sm shadow">
                     Aceptar y Continuar →
                 </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL ESPERA DE VALIDACIÓN FARMACÉUTICA (MODO GUARDIA) -->
+    <div id="modal-espera-guardia" class="hidden fixed inset-0 bg-black/75 flex items-center justify-center p-4 z-50">
+        <div class="bg-white rounded-3xl max-w-md w-full p-8 text-center shadow-2xl border-4 border-amber-500">
+            <div class="text-6xl mb-3 animate-pulse">🩺</div>
+            <h3 class="text-2xl font-black text-slate-800">Esperando validación del farmacéutico</h3>
+            <p class="text-slate-500 text-sm mt-2">El modo guardia está activo. Tu pedido está siendo revisado por el profesional antes de dispensar.</p>
+            <div class="mt-5 bg-amber-50 border border-amber-200 text-amber-900 text-xs font-bold py-2.5 px-4 rounded-xl">
+                Pedido #<span id="espera-comanda-id">-</span> · Consultando estado automáticamente...
             </div>
         </div>
     </div>
@@ -823,7 +840,10 @@
                     </div>
                     <div class="mt-4 pt-3 border-t flex justify-between items-center">
                         <span class="text-xl font-black text-slate-900">${m.preu.toFixed(2)} €</span>
-                        <button onclick="afegirCistella('${m.cn}')" class="bg-teal-600 hover:bg-teal-700 text-white font-bold px-4 py-2 rounded-xl text-sm">+ Añadir</button>
+                        ${m.estoc_total > 0
+                            ? `<button onclick="afegirCistella('${m.cn}')" class="bg-teal-600 hover:bg-teal-700 text-white font-bold px-4 py-2 rounded-xl text-sm">+ Añadir</button>`
+                            : `<button disabled class="bg-slate-200 text-slate-500 font-bold px-4 py-2 rounded-xl text-sm cursor-not-allowed">Sin stock</button>`
+                        }
                     </div>
                 </div>
             `).join('');
@@ -832,9 +852,17 @@
         function afegirCistella(cn) {
             const med = catalegOTC.find(m => m.cn === cn);
             if (!med) return;
+            if (!med.estoc_total || med.estoc_total <= 0) {
+                mostrarBloqueig([`No se puede realizar la venta de '${med.nom_oficial}': stock agotado (0 unidades).`]);
+                return;
+            }
             vendaAnonimAcceptada = false;
             const item = cistella.find(i => i.cn === cn);
             if (item) {
+                if (item.quantitat >= med.estoc_total) {
+                    mostrarBloqueig([`No hay más stock disponible de '${med.nom_oficial}' (máximo ${med.estoc_total} u.).`]);
+                    return;
+                }
                 if (item.quantitat >= med.limit_unitats_venda) {
                     mostrarBloqueig([`Límite máximo de ${med.limit_unitats_venda} unidades para ${med.nom_oficial}.`]);
                     return;
@@ -914,6 +942,38 @@
             }
         }
 
+        let intervalEsperaComanda = null;
+
+        function esperarResolucioComanda(comandaId) {
+            document.getElementById('espera-comanda-id').innerText = comandaId;
+            document.getElementById('modal-espera-guardia').classList.remove('hidden');
+
+            if (intervalEsperaComanda) clearInterval(intervalEsperaComanda);
+            intervalEsperaComanda = setInterval(async () => {
+                try {
+                    const res = await fetch(`/api/comanda/${comandaId}/estat`);
+                    if (!res.ok) return;
+                    const data = await res.json();
+
+                    if (data.estat === 'Dispensada') {
+                        clearInterval(intervalEsperaComanda);
+                        intervalEsperaComanda = null;
+                        tancarModal('modal-espera-guardia');
+                        mostrarExit(data.moviments || []);
+                    } else if (data.estat === 'Rebutjada') {
+                        clearInterval(intervalEsperaComanda);
+                        intervalEsperaComanda = null;
+                        tancarModal('modal-espera-guardia');
+                        mostrarBloqueig([
+                            `Venta bloqueada por el farmacéutico: ${data.motiu_rebuig || 'Dispensación denegada en revisión clínica.'}`
+                        ]);
+                    }
+                } catch (err) {
+                    console.error("Error consultando estado del pedido:", err);
+                }
+            }, 2000);
+        }
+
         async function enviarDispensacioOTC(cnExtra) {
             tancarModal('modal-cross-sell');
             const items = cistella.map(i => ({ cn: i.cn, quantitat: i.quantitat }));
@@ -931,8 +991,39 @@
                 })
             });
             const data = await res.json();
-            if (!data.ok) { mostrarBloqueig(data.alertes); }
-            else { buidarCistella(); mostrarExit(data.moviments); }
+            if (!data.ok) {
+                mostrarBloqueig(data.alertes);
+                obrirCatalegOTC(); // Refresca estocs reals a la pantalla
+            } else if (data.pendent_guardia) {
+                buidarCistella();
+                esperarResolucioComanda(data.comanda_cua_id);
+            } else {
+                buidarCistella();
+                mostrarExit(data.moviments);
+            }
+        }
+
+        async function dispensarQR(codiQr, dni, cn, quantitat) {
+            const res = await fetch('/api/dispensar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    dni_nie: dni,
+                    items: [{ cn: cn, quantitat: quantitat }],
+                    tipus_venda: "Con Receta (QR)",
+                    codi_qr: codiQr
+                })
+            });
+            const data = await res.json();
+            if (!data.ok) {
+                mostrarBloqueig(data.alertes);
+            } else if (data.pendent_guardia) {
+                document.getElementById('detall-qr').classList.add('hidden');
+                esperarResolucioComanda(data.comanda_cua_id);
+            } else {
+                document.getElementById('detall-qr').classList.add('hidden');
+                mostrarExit(data.moviments);
+            }
         }
 
         function testQR(codi) { document.getElementById('input-codi-qr').value = codi; consultarQR(); }
@@ -964,21 +1055,6 @@
             `;
         }
 
-        async function dispensarQR(codiQr, dni, cn, quantitat) {
-            const res = await fetch('/api/dispensar', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    dni_nie: dni,
-                    items: [{ cn: cn, quantitat: quantitat }],
-                    tipus_venda: "Con Receta (QR)",
-                    codi_qr: codiQr
-                })
-            });
-            const data = await res.json();
-            if (!data.ok) { mostrarBloqueig(data.alertes); }
-            else { document.getElementById('detall-qr').classList.add('hidden'); mostrarExit(data.moviments); }
-        }
 
         function mostrarBloqueig(alertes) {
             document.getElementById('llista-alertes').innerHTML = alertes.map(a => `<div>🚨 ${a}</div>`).join('');
@@ -1002,6 +1078,23 @@
             tancarModal('modal-exit');
             tancarSessio();
         }
+
+        async function comprovarEstatRobotClient() {
+            try {
+                const res = await fetch('/api/robot/estat');
+                if (!res.ok) return;
+                const data = await res.json();
+                const banner = document.getElementById('banner-robot-bloquejat');
+                if (banner) {
+                    banner.classList.toggle('hidden', !data.robot_bloquejat);
+                }
+            } catch (err) {
+                console.error("Error consultando estado del robot:", err);
+            }
+        }
+
+        comprovarEstatRobotClient();
+        setInterval(comprovarEstatRobotClient, 3000);
     </script>
 </body>
 </html>
